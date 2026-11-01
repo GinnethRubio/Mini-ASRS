@@ -2,6 +2,12 @@
 
 Coordinación en Python del sistema automatizado de almacenamiento y recuperación de sobres Mini AS/RS: rack de 4 columnas × 28 filas (112 posiciones), pórtico cartesiano con ejes X/Z eléctricos, eje Y y sujetador neumáticos, banda de entrada, banda de salida e identificación por código QR.
 
+
+## Video demostrativo
+
+Haz clic en la captura para abrir el video en Google Drive.
+
+[![Captura de la HMI del Mini AS/RS](docs/media/captura_hmi_mini_asrs.png)](https://drive.google.com/file/d/13d0R-Bz9BVPwiDQlmKT5-XTVxBPbAl1q/view?usp=sharing)
 ## Arquitectura
 
 | Componente | Función | Enlace |
@@ -54,7 +60,7 @@ El detalle canal por canal y la tabla de errores con acciones de recuperación e
 
 Versiones identificadas en el laboratorio: CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.67 Pneumática. Según la información del usuario, corresponden a licencias académicas del laboratorio de la Uniagustiniana.
 
-El análisis ampliado de funciones, comunicación, dependencias, metodología y evaluación económica está en [la revisión técnica y metodológica](docs/revision_tecnica_metodologica.md).
+La descripción ampliada de funciones, flujo de datos, heartbeat y campañas está en [funcionamiento y arquitectura](docs/funcionamiento_y_arquitectura.md).
 ## Estructura
 
 | Ruta | Contenido |
@@ -156,4 +162,4 @@ Los resultados de modelo, dobles de prueba y ejecución conectada deben distingu
 
 ## Autores
 
-Juan David González Chávez y Ginneth Rubio Camacho.\n\n
+Juan David González Chávez y Ginneth Rubio Camacho.\n\n\n\n\n
