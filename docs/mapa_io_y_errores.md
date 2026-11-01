@@ -7,18 +7,18 @@ Este documento transcribe el mapa lógico del texto de PLC y del diagrama funcio
 ## Diagrama lógico de E/S
 
 ```mermaid
-%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 55, "rankSpacing": 75, "curve": "linear"}}}%%
+%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 85, "rankSpacing": 110, "curve": "linear", "padding": 18}}}%%
 flowchart LR
     subgraph IN["Entradas desde FluidSIM"]
         direction TB
-        IN0["IN0 · finales de carrera<br/>0 Y retraído · 1 Y extendido<br/>2 pinza abierta · 3 pinza cerrada"]
-        IN1["IN1 · mandos y permisos<br/>0 marcha · 1 recuperar · 2 paro<br/>3 K0 emergencia · 4 presión<br/>5 rearme"]
+        IN0["IN0 · finales de carrera<br/>bit 0 · Y retraído<br/>bit 1 · Y extendido<br/>bit 2 · pinza abierta<br/>bit 3 · pinza cerrada"]
+        IN1["IN1 · mandos y permisos<br/>bit 0 · marcha<br/>bit 1 · recuperar<br/>bit 2 · paro<br/>bit 3 · K0 emergencia<br/>bit 4 · presión<br/>bit 5 · rearme"]
     end
-    PLC["CODESYS PLC<br/>Secuencia · interbloqueos"]
-    OUT["OUT0 · salidas hacia FluidSIM<br/>0 Y extender · 1 Y retraer<br/>2 pinza cerrar · 3 pinza liberar<br/>4 H1 marcha · 5 H2 movimiento<br/>6 H3 recuperación · 7 H4 alarma"]
-    IN0 -->|"estados"| PLC
-    IN1 -->|"mandos"| PLC
-    PLC -->|"órdenes"| OUT
+    PLC["CODESYS PLC<br/>secuencia<br/>interbloqueos"]
+    OUT["OUT0 · salidas hacia FluidSIM<br/>bit 0 · Y extender<br/>bit 1 · Y retraer<br/>bit 2 · pinza cerrar<br/>bit 3 · pinza liberar<br/>bit 4 · H1 marcha<br/>bit 5 · H2 movimiento<br/>bit 6 · H3 recuperación<br/>bit 7 · H4 alarma"]
+    IN0 -->|"estados de posición"| PLC
+    IN1 -->|"mandos y permisos"| PLC
+    PLC -->|"órdenes a actuadores e indicadores"| OUT
     classDef io fill:#eef4ff,stroke:#4263a5,color:#172b4d;
     classDef logic fill:#e9f7ef,stroke:#2f855a,color:#173b2a;
     class IN0,IN1,OUT io;

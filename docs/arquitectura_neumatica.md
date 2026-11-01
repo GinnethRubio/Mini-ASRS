@@ -40,9 +40,9 @@ El mapa lógico de entrada coincide con el texto de PLC: la confirmación K0 se 
 La cadena entre los subsistemas es:
 
 ```mermaid
-%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 80, "rankSpacing": 100, "curve": "linear"}}}%%
+%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 90, "rankSpacing": 120, "curve": "linear", "padding": 18}}}%%
 flowchart LR
-    FS["FluidSIM<br/>actuadores Y y pinza"] <-->|"OPC DA<br/>IN0 · IN1 · OUT0"| PLC["CODESYS<br/>secuencia e interbloqueos"] <-->|"OPC UA<br/>órdenes, estados y confirmaciones"| PY["Coordinador Python"] <-->|"ZeroMQ Remote API<br/>órdenes y estado de escena"| SIM["CoppeliaSim<br/>ejes X/Z · bandas · QR"]
+    FS["FluidSIM<br/>actuadores Y<br/>y pinza"] <-->|"OPC DA<br/>IN0 · IN1 · OUT0"| PLC["CODESYS<br/>secuencia<br/>e interbloqueos"] <-->|"OPC UA<br/>órdenes<br/>estados y confirmaciones"| PY["Coordinador Python<br/>heartbeat<br/>validación y movimiento"] <-->|"ZeroMQ Remote API<br/>órdenes<br/>estado de escena"| SIM["CoppeliaSim<br/>ejes X/Z<br/>bandas y QR"]
     classDef ext fill:#eef4ff,stroke:#4263a5,color:#172b4d;
     classDef ctl fill:#e9f7ef,stroke:#2f855a,color:#173b2a;
     class FS,SIM ext;
