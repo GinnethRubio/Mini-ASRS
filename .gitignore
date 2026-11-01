@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.bak
+inventario_mini_asrs.json
+inventario_mini_asrs.respaldo.json
+inventario_antes_*.json
+respaldo*/
+logs_112/
+datos_experimentos/
+*.tmp

@@ -1,0 +1,29 @@
+{
+    "version": "2.0.0",
+    "options": {
+        "env": {
+            "ASRS_OPC_URL": "opc.tcp://localhost:4840",
+            "PYTHONUTF8": "1"
+        }
+    },
+    "tasks": [
+        {
+            "label": "1. Crear .venv e instalar dependencias",
+            "type": "shell",
+            "command": "py -3 -m venv .venv; .venv\\Scripts\\python.exe -m pip install --upgrade pip; .venv\\Scripts\\python.exe -m pip install -r requirements.txt pyzmq cbor2",
+            "problemMatcher": []
+        },
+        {
+            "label": "2. Diagnostico (OPC UA, inventario, Excel)",
+            "type": "shell",
+            "command": "Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; .\\.venv\\Scripts\\Activate.ps1; python diagnostico.py",
+            "problemMatcher": []
+        },
+        {
+            "label": "3. Ejecutar main.py (coordinador)",
+            "type": "shell",
+            "command": "Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; .\\.venv\\Scripts\\Activate.ps1; python main.py",
+            "problemMatcher": []
+        }
+    ]
+}

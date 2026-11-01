@@ -1,0 +1,9 @@
+opcua>=0.98.13
+coppeliasim-zmqremoteapi-client
+openpyxl>=3.1
+opencv-python
+numpy
+qrcode[pil]
+psutil
+scipy
+matplotlib
