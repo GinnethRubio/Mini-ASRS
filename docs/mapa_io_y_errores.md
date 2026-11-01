@@ -7,12 +7,21 @@ Este documento transcribe el mapa lógico del texto de PLC y del diagrama funcio
 ## Diagrama lógico de E/S
 
 ```mermaid
-%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 80, "rankSpacing": 100, "curve": "linear"}}}%%
+%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 55, "rankSpacing": 75, "curve": "linear"}}}%%
 flowchart LR
-    IN["Entradas digitales\nIN0: finales de carrera<br/>IN1: mandos y permisos"] --> PLC["Control de secuencia\ninterbloqueos · comunicación<br/>alarmas · indicadores HMI"] --> OUT["Salidas digitales\nOUT0.0–OUT0.3: válvulas<br/>OUT0.4–OUT0.7: pilotos"]
+    subgraph IN["Entradas desde FluidSIM"]
+        direction TB
+        IN0["IN0 · finales de carrera<br/>0 Y retraído · 1 Y extendido<br/>2 pinza abierta · 3 pinza cerrada"]
+        IN1["IN1 · mandos y permisos<br/>0 marcha · 1 recuperar · 2 paro<br/>3 K0 emergencia · 4 presión<br/>5 rearme"]
+    end
+    PLC["CODESYS PLC<br/>Secuencia · interbloqueos"]
+    OUT["OUT0 · salidas hacia FluidSIM<br/>0 Y extender · 1 Y retraer<br/>2 pinza cerrar · 3 pinza liberar<br/>4 H1 marcha · 5 H2 movimiento<br/>6 H3 recuperación · 7 H4 alarma"]
+    IN0 -->|"estados"| PLC
+    IN1 -->|"mandos"| PLC
+    PLC -->|"órdenes"| OUT
     classDef io fill:#eef4ff,stroke:#4263a5,color:#172b4d;
     classDef logic fill:#e9f7ef,stroke:#2f855a,color:#173b2a;
-    class IN,OUT io;
+    class IN0,IN1,OUT io;
     class PLC logic;
 ```
 
@@ -81,4 +90,4 @@ Las capturas aportadas identifican CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.6
 
 ## Asignación de emergencia
 
-El texto de PLC y el diagrama funcional asignan la confirmación de emergencia K0 a IN1.3.\n
+El texto de PLC y el diagrama funcional asignan la confirmación de emergencia K0 a IN1.3.

@@ -65,4 +65,4 @@ FluidSIM modela las órdenes y confirmaciones del cilindro Y y de la pinza. Pyth
 
 ## Versiones
 
-Las capturas de versiones aportadas identifican CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.67 Pneumática. El usuario indica que son licencias académicas del laboratorio de la Uniagustiniana.\n
+Las capturas de versiones aportadas identifican CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.67 Pneumática. El usuario indica que son licencias académicas del laboratorio de la Uniagustiniana.
