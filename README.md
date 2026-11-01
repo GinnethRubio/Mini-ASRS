@@ -13,6 +13,48 @@ Coordinación en Python del sistema automatizado de almacenamiento y recuperaci�
 
 El PLC decide la secuencia y la celda de destino; Python mueve la escena, valida cada paso y confirma al PLC solo después de guardar el inventario.
 
+### Diagrama de arquitectura
+
+```mermaid
+%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 80, "rankSpacing": 100, "curve": "linear"}}}%%
+flowchart LR
+    HMI["HMI de operador"] --> PLC["CODESYS Control Win V3<br/>Secuencia · destino · permisos"]
+    PLC <-->|"OPC UA · órdenes y confirmaciones"| PY["Python · main.py<br/>Coordinación · heartbeat · validación"]
+    PY <-->|"ZeroMQ · movimiento y estado"| SIM["CoppeliaSim<br/>Ejes X/Z · escena · bandas · QR"]
+    PLC <-->|"OPC DA · señales neumáticas"| FS["FluidSIM<br/>Cilindro Y · pinza neumática"]
+
+    classDef external fill:#eef4ff,stroke:#4263a5,color:#172b4d;
+    classDef app fill:#e9f7ef,stroke:#2f855a,color:#173b2a;
+    class HMI,PLC,FS,SIM external;
+    class PY app;
+
+```
+
+La banda de salida está implementada en `control_banda_salida.py` y es utilizada por el módulo de recuperación.
+### Circuito neumático e integración
+
+El circuito de FluidSIM representa el eje Y y la pinza neumática. El suministro comprende compresor 0P1, unidad de mantenimiento indicada a 6 bar y presostato 0B1 indicado a 4 bar. El cilindro de doble efecto 1A1 mueve Y mediante válvula 5/2 biestable, reguladores de caudal y finales de carrera 1B1/1B2. El actuador de simple efecto 1A2 acciona la pinza por válvula 3/2 biestable, con regulación de caudal y sensores 2B1/2B2. S1/S4/S2/S3 gestionan marcha, recuperación, paro y rearme; S0/K0 informa el estado de emergencia. H1–H4 señalan marcha, movimiento, recuperación y alarma.
+
+FluidSIM intercambia señales con el PLC por OPC DA: posiciones y mandos llegan por `IN0`/`IN1`, y órdenes de válvula y pilotos salen por `OUT0`. Python enlaza con el PLC por OPC UA y con CoppeliaSim por ZeroMQ Remote API. En la co-simulación, el PLC y FluidSIM modelan las órdenes y confirmaciones neumáticas de Y y la pinza; Python refleja esos movimientos en la planta 3D de CoppeliaSim y ejecuta allí la cinemática X/Z, las bandas y la identificación QR. Los ejes X/Z están representados en la escena virtual. El [detalle del circuito e interconexión](docs/arquitectura_neumatica.md) resume los componentes y la interconexión.
+
+El flujo funcional recibe e identifica el sobre, asigna celda, lo recoge con Y y la pinza, lo desplaza por X/Z, deposita o despacha y actualiza el inventario QR. Los valores de presión del plano describen la configuración nominal representada en la simulación.
+### Diagrama lógico de entradas y salidas
+
+```mermaid
+%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 80, "rankSpacing": 100, "curve": "linear"}}}%%
+flowchart LR
+    IN["Entradas digitales<br/>IN0: sensores de posición<br/>IN1: marcha y permisos"] --> PLC["Controlador<br/>secuencia · interbloqueos<br/>comunicación · alarmas"] --> OUT["Salidas digitales<br/>OUT0.0–0.3: actuadores<br/>OUT0.4–0.7: indicadores"]
+    classDef io fill:#eef4ff,stroke:#4263a5,color:#172b4d;
+    classDef logic fill:#e9f7ef,stroke:#2f855a,color:#173b2a;
+    class IN,OUT io;
+    class PLC logic;
+```
+
+El detalle canal por canal y la tabla de errores con acciones de recuperación están en [el mapa lógico de E/S y alarmas](docs/mapa_io_y_errores.md).
+
+Versiones identificadas en el laboratorio: CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.67 Pneumática. Según la información del usuario, corresponden a licencias académicas del laboratorio de la Uniagustiniana.
+
+El análisis ampliado de funciones, comunicación, dependencias, metodología y evaluación económica está en [la revisión técnica y metodológica](docs/revision_tecnica_metodologica.md).
 ## Estructura
 
 | Ruta | Contenido |
@@ -40,10 +82,10 @@ Requiere Windows, Python 3.11 o superior, CODESYS Control Win V3, FluidSIM y Cop
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt pyzmq cbor2
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-En VS Code, las tareas de `.vscode/tasks.json` crean el entorno, ejecutan el diagnóstico y lanzan el coordinador. La dirección del servidor OPC UA se define con la variable `ASRS_OPC_URL` (por defecto `opc.tcp://localhost:4840` en las tareas).
+En VS Code, las tareas de `.vscode/tasks.json` crean el entorno, ejecutan el diagnóstico y lanzan el coordinador. La dirección del servidor OPC UA se define con `ASRS_OPC_URL`. El valor por defecto del código es `opc.tcp://192.168.0.21:4840`; las tareas de VS Code lo reemplazan por `opc.tcp://localhost:4840`. Ajusta la tarea al endpoint real del runtime antes de conectar.
 
 ## Ejecución
 
@@ -102,6 +144,16 @@ Los niveles son A (pruebas del selector), B (modelo rápido), C (contraste integ
 
 El análisis pareado toma la corrida como unidad experimental: calcula por ocupación el número de parejas, la media y dispersión por política, la diferencia d = T_R − T_C, su intervalo de confianza del 95 % (prueba t relacionada), la diferencia relativa y los fallos. Las corridas incompletas o sin pareja se reportan en `excluidas.csv`. El contraste compara, operación por operación, el tiempo del modelo con el tiempo integrado y reporta MAE, sesgo, máximo, percentil 95 y fracción dentro de la tolerancia max(0,5 s; 5 %).
 
+## Requerimientos y alcance de uso
+
+- Windows y Python 3.11 o superior.
+- Paquetes Python declarados en `requirements.txt`, incluidos `pyzmq` y `cbor2` para ZeroMQ.
+- Runtime CODESYS Control Win V3 con símbolos OPC UA compatibles.
+- FluidSIM con el enlace OPC DA y el proyecto PLC configurados.
+- CoppeliaSim con la escena y objetos nombrados que esperan los controladores.
+
+Los resultados de modelo, dobles de prueba y ejecución conectada deben distinguirse de una validación física.
+
 ## Autores
 
-Juan David González Chávez y Ginneth Rubio Camacho.
+Juan David González Chávez y Ginneth Rubio Camacho.\n\n

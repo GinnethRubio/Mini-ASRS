@@ -1,5 +1,7 @@
 opcua>=0.98.13
 coppeliasim-zmqremoteapi-client
+pyzmq
+cbor2
 openpyxl>=3.1
 opencv-python
 numpy
