@@ -65,7 +65,8 @@ def leer_plc(url):
 
 class Supervisor:
     def __init__(self, args, carpeta, corrida, leer, inicio_runtime, ejecutar_bloque, coordinador,
-                 dormir=time.sleep, reloj=time.monotonic):
+                 dormir=time.sleep, reloj=time.monotonic, reiniciar=None):
+        self.reiniciar = reiniciar
         self.args, self.carpeta, self.corrida = args, Path(carpeta), corrida
         self.leer, self.inicio_runtime, self.ejecutar_bloque = leer, inicio_runtime, ejecutar_bloque
         self.coordinador, self.dormir, self.reloj = coordinador, dormir, reloj
@@ -130,8 +131,17 @@ class Supervisor:
                 return inicio if inicio and self.margen_suficiente(inicio) else ahora_utc()
             return None
         if forzar or not (inicio_previo and self.margen_suficiente(inicio_previo)):
-            self.emitir('runtime_sin_margen', accion='Reiniciar el runtime CODESYS; la campaña continúa sola al volver')
-            self.avisar()
+            if self.reiniciar is None:
+                self.emitir('runtime_sin_margen', accion='Reiniciar el runtime CODESYS; la campaña continúa sola al volver')
+                self.avisar()
+            else:
+                self.emitir('runtime_sin_margen', accion='Reinicio automático del servicio CODESYS')
+                try:
+                    self.emitir('runtime_reiniciado', servicio=self.reiniciar())
+                except Exception as exc:
+                    self.emitir('reinicio_automatico_fallido', error=repr(exc),
+                                accion='Reiniciar el runtime CODESYS a mano; la campaña continúa sola al volver')
+                    self.avisar()
         return self.esperar(listo, 'reinicio del runtime CODESYS', self.args.espera_max_min * 60)
 
     def avisar(self):
@@ -282,6 +292,38 @@ class Coordinador:
                                         env={**os.environ, 'PYTHONUTF8': '1'})
 
 
+def reiniciar_servicio_codesys(espera_s=60):
+    """Detiene y arranca el servicio de CODESYS Control Win; requiere consola de administrador.
+
+    El PLC ya está en reposo (el bloque se cerró con paro normal) y arranca con la aplicación de arranque."""
+    import psutil
+    nombre = None
+    for servicio in psutil.win_service_iter():
+        try:
+            if 'codesyscontrol' in (servicio.binpath() or '').lower():
+                nombre = servicio.name()
+                break
+        except (psutil.AccessDenied, psutil.NoSuchProcess, OSError):
+            continue
+    if nombre is None:
+        raise RuntimeError('No se encontró el servicio de CODESYS Control Win')
+
+    def estado():
+        return psutil.win_service_get(nombre).status()
+
+    def cambiar(orden, objetivo):
+        r = subprocess.run(['sc', orden, nombre], capture_output=True, text=True)
+        limite = time.monotonic() + espera_s
+        while estado() != objetivo:
+            if time.monotonic() > limite:
+                raise RuntimeError(f'sc {orden} {nombre}: {r.stdout.strip() or r.stderr.strip()}')
+            time.sleep(1)
+    if estado() != 'stopped':
+        cambiar('stop', 'stopped')
+    cambiar('start', 'running')
+    return nombre
+
+
 def bloque_banco(args, carpeta):
     def ejecutar(numero, punto, continuar, inicio):
         cmd = [sys.executable, str(AQUI / 'banco_112.py'), 'campana', '--proyecto', str(RAIZ),
@@ -339,6 +381,8 @@ def main():
     ap.add_argument('--margen-runtime-min', type=float, default=10)
     ap.add_argument('--bloque-min', type=float, default=45)
     ap.add_argument('--espera-max-min', type=float, default=60, help='Tiempo máximo de espera por reconexión; 0 sin límite')
+    ap.add_argument('--reiniciar-runtime', action='store_true',
+                    help='Reiniciar el servicio CODESYS al agotar la ventana; requiere consola de administrador')
     ap.add_argument('--sin-lanzar-main', action='store_true', help='No iniciar main.py; esperar que el operador lo haga')
     ap.add_argument('--licencia', default='CODESYS Control Win V3, licencia académica del laboratorio')
     ap.add_argument('--salida', type=Path, default=RAIZ / 'logs_112')
@@ -380,7 +424,8 @@ def main():
     if args.modo == 'contraste':
         print('Campaña de contraste:', args.campana, flush=True)
     sup = Supervisor(args, carpeta, corrida, leer, inicio_runtime, ejecutar_bloque,
-                     Coordinador(carpeta, leer, lanzar=not args.sin_lanzar_main))
+                     Coordinador(carpeta, leer, lanzar=not args.sin_lanzar_main),
+                     reiniciar=reiniciar_servicio_codesys if args.reiniciar_runtime else None)
     estado = 'error'
     try:
         codigo = sup.ejecutar()

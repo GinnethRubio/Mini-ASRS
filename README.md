@@ -189,6 +189,7 @@ Con las corridas completas, `analizar_experimentos.py pareado --campana <id>` pr
 `banco_pruebas_112/supervisor_campana.py` ejecuta la campaña por bloques y la mantiene en marcha sin intervención:
 
 - Antes del límite del runtime CODESYS (`limite_runtime_min` menos el margen) envía paro normal, espera el reposo confirmado y guarda el punto de continuación. Si el runtime todavía tiene tiempo, sigue con el bloque siguiente; si no, espera a que CODESYS se reinicie y continúa.
+- Con `--reiniciar-runtime` (o `"reinicio_automatico": true` en `experimento.json`) el supervisor detiene y arranca el servicio de CODESYS Control Win cuando se agota la ventana; la consola debe abrirse como administrador. Si el reinicio falla, avisa y espera el reinicio manual.
 - Si FluidSIM pierde los permisos, el PLC congela el paso y el banco espera su regreso hasta `--espera-comunicacion-s` sin cerrar el bloque.
 - Si CODESYS se desconecta, reintenta la conexión con esperas crecientes de 5 a 30 s, relanza `main.py`, toma el inventario resincronizado con la escena y reanuda desde la fase en que iba. El ciclo interrumpido no se contabiliza.
 - Una alarma del proceso, un inventario incoherente o un sobre sujeto detienen la campaña sin rearmar.

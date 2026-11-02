@@ -229,6 +229,28 @@ class Pruebas(unittest.TestCase):
         self.assertEqual(len(e.bloques), 2)
         self.assertNotEqual(e.bloques[0], e.bloques[1])
 
+    def test_reinicio_automatico_del_runtime(self):
+        e = self.e
+        e.inicio = datetime.now(timezone.utc) - timedelta(minutes=55)
+        llamadas = []
+
+        def reiniciar():
+            llamadas.append(e.t)
+            e.inicio = datetime.now(timezone.utc)
+            return 'CODESYS Control Win V3'
+
+        def ejecutar(n, punto, continuar, inicio):
+            e.bloques.append(inicio)
+            return 0, str(e.carpeta(n))
+        sup = sv.Supervisor(self.args, self.tmp.name, None, e.leer, e.inicio_runtime, ejecutar, e.coordinador,
+                            dormir=e.dormir, reloj=e.reloj, reiniciar=reiniciar)
+        self.assertEqual(sup.ejecutar(), 0)
+        sup.cerrar()
+        self.assertEqual(len(llamadas), 1)
+        self.assertEqual(e.bloques, [e.inicio.isoformat()])
+        eventos = [json.loads(x)['tipo'] for x in (Path(self.tmp.name) / 'supervisor.jsonl').read_text().splitlines()]
+        self.assertIn('runtime_reiniciado', eventos)
+
     def test_clasifica_cortes(self):
         self.assertTrue(sv.es_corte_comunicacion('ConnectionResetError(10054)'))
         self.assertTrue(sv.es_corte_comunicacion("RuntimeError('Contador de operaciones reiniciado')"))

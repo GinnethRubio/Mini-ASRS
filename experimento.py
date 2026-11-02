@@ -128,7 +128,7 @@ class Ejecucion:
         cmd = [sys.executable, str(RAIZ / 'banco_pruebas_112' / 'supervisor_campana.py'), '--confirmar-movimientos',
                '--limite-runtime-min', str(c['limite_runtime_min']), '--margen-runtime-min', str(c['margen_runtime_min']),
                '--espera-max-min', str(c['espera_max_min']), '--licencia', c['licencia'], '--datos', str(self.datos),
-               *extra]
+               *(['--reiniciar-runtime'] if c.get('reinicio_automatico') else []), *extra]
         return subprocess.run(cmd, cwd=RAIZ).returncode
 
     def fase_c(self):
