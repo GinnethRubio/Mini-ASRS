@@ -153,8 +153,11 @@ python -m unittest test_estrategias_colocacion
 ```powershell
 python experimento.py               # fases A, E y B, sin conexión
 python experimento.py --conectado   # además las fases D y C con CODESYS, FluidSIM y CoppeliaSim
+python experimento.py --conectado --fases C,D   # contraste y luego cobertura sobre el rack que deja el contraste
 python experimento.py --fases C --campana-contraste <id>   # continuar un contraste integrado
 ```
+
+Las fases conectadas deben ejecutarse desde una consola de administrador, para que el supervisor pueda reiniciar el servicio de CODESYS. El experimento desactiva el modo de selección de la consola de Windows, de modo que un clic sobre la ventana no detiene la campaña.
 
 El protocolo se fija en `experimento.json` antes de ejecutar (diferencia mínima relevante, semillas, réplicas, ocupaciones y parámetros del runtime) y su hash queda en cada corrida. Las fases se ejecutan en orden:
 
@@ -166,13 +169,13 @@ El protocolo se fija en `experimento.json` antes de ejecutar (diferencia mínima
 | D | Llenado de 112 sobres y 112 recuperaciones en el sistema integrado, con el supervisor de campaña |
 | C | Contraste integrado R vs C con destino propuesto, análisis pareado y contraste modelo vs integrado |
 
-El resumen de cada ejecución queda en `datos_experimentos/ejecuciones/<fecha>/resumen.json`. Las fases sin conexión tardan alrededor de un minuto; la D, entre 2 y 2,5 horas, y la C, entre 6 y 8 horas con los parámetros de `experimento.json`, incluidos los reinicios del runtime.
+El resumen de cada ejecución queda en `datos_experimentos/ejecuciones/<fecha>/resumen.json`. Las fases sin conexión tardan alrededor de un minuto. La duración de las fases C y D depende del número de ventanas del runtime que ocupan y de las reconexiones; con los parámetros de `experimento.json`, la C requiere varias ventanas de una hora y la D entre 1,5 y 2,5 horas.
 
 ### Contraste integrado R vs C
 
 `banco_pruebas_112/contraste_rc.py` ejecuta en el sistema integrado las mismas parejas recuperar + almacenar del modelo rápido: igual inventario inicial, igual secuencia de solicitudes y, para R, la misma selección aleatoria, generados con `SeedSequence(contraste.semilla)`. Por cada ocupación K y réplica se corren R y C, en orden alternado entre réplicas (R-C en las impares, C-R en las pares) para compensar la deriva de tiempos del sistema, con `contraste.parejas` parejas medidas cada una. Antes de cada corrida el rack se lleva al inventario inicial con recuperaciones y almacenamientos reales, registrados como corridas `prep_` de diagnóstico.
 
-Cada almacenamiento usa la estrategia 3: Python decide la celda (aleatoria uniforme o de mínimo costo) y el PLC la ejecuta. El progreso queda en `logs_112/estado_contraste_<campaña>.json`; si el tiempo del runtime no alcanza para la corrida siguiente, el bloque se cierra en reposo, y una corrida interrumpida por desconexión se repite completa con sufijo `_i2`. El supervisor ejecuta el contraste con el mismo esquema de bloques y reconexión:
+Cada almacenamiento usa la estrategia 3: Python decide la celda (aleatoria uniforme o de mínimo costo) y el PLC la ejecuta. El progreso queda en `logs_112/estado_contraste_<campaña>.json`, y al reanudar las corridas ya completas se identifican en `registro_corridas.csv` y no se repiten. Si el tiempo del runtime no alcanza para la corrida siguiente, el bloque se cierra en reposo, y una corrida interrumpida por desconexión se repite completa con sufijo `_i2`. El supervisor ejecuta el contraste con el mismo esquema de bloques y reconexión:
 
 ```powershell
 python .\banco_pruebas_112\supervisor_campana.py --modo contraste --confirmar-movimientos
@@ -192,6 +195,8 @@ Con las corridas completas, `analizar_experimentos.py pareado --campana <id>` pr
 - Con `--reiniciar-runtime` (o `"reinicio_automatico": true` en `experimento.json`) el supervisor detiene y arranca el servicio de CODESYS Control Win cuando se agota la ventana; la consola debe abrirse como administrador. Si el reinicio falla, avisa y espera el reinicio manual.
 - Si FluidSIM pierde los permisos, el PLC congela el paso y el banco espera su regreso hasta `--espera-comunicacion-s` sin cerrar el bloque.
 - Si CODESYS se desconecta, reintenta la conexión con esperas crecientes de 5 a 30 s, relanza `main.py`, toma el inventario resincronizado con la escena y reanuda desde la fase en que iba. El ciclo interrumpido no se contabiliza.
+- Vigila el proceso `main.py` durante toda la campaña y lo relanza si termina, incluso cuando `GVL.Maquina_Lista` conserva el último valor publicado. Antes de iniciar cada corrida espera hasta 60 s a que el PLC quede en modo automático, sin modo manual ni modo paso activos.
+- Con `"espera_max_min": 0` no hay límite de espera por reconexión; la campaña queda en espera hasta que el sistema vuelva.
 - Una alarma del proceso, un inventario incoherente o un sobre sujeto detienen la campaña sin rearmar.
 
 Cada evento queda en `logs_112/<fecha>_supervisor/` (`supervisor.jsonl`, `estado.json` con el estado actual, `main_*.log` y la carpeta de cada bloque) y la campaña completa en una corrida de nivel D del registro experimental, con las operaciones de todos los bloques, las interrupciones con su causa y duración y los fallos.
