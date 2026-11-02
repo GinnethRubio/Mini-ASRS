@@ -334,7 +334,12 @@ def main():
     nodos = [nodo(n) for n in NOMBRES]
 
     def leer():
-        return dict(zip(NOMBRES, plc.client.get_values(nodos)))
+        d = dict(zip(NOMBRES, plc.client.get_values(nodos)))
+        faltan = [n for n, v in d.items() if v is None]
+        if faltan:
+            raise RuntimeError('Símbolos sin publicar en el runtime (descargar el proyecto y crear la aplicación '
+                               'de arranque): ' + ', '.join(faltan))
+        return d
 
     def escribir(n, v):
         x = nodo(n)
@@ -362,7 +367,8 @@ def main():
     except Exception as exc:
         (carpeta / 'estado_interrumpido.json').write_text(json.dumps(dict(motivo=repr(exc), estado=str(estado_path))),
                                                          encoding='utf-8')
-        log('error', error=repr(exc))
+        import traceback
+        log('error', error=repr(exc), traza=traceback.format_exc())
         try:
             escribir('GVL.STOP', True)
         except Exception:
