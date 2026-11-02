@@ -30,6 +30,13 @@ class Pruebas(unittest.TestCase):
         self.c=b.Campana(lambda n,v:self.escritos.append((n,v)),self.log,0,lambda:self.now)
         self.d=muestra()
 
+    def test_estrategia_2_rechaza_plc_antiguo(self):
+        plc=SimpleNamespace(client=SimpleNamespace(get_node=lambda n:SimpleNamespace(get_value=lambda:1)))
+        with self.assertRaisesRegex(RuntimeError,'incompatible'):
+            b.verificar_estrategia_plc(plc,4,2)
+        plc.client.get_node=lambda n:SimpleNamespace(get_value=lambda:2)
+        b.verificar_estrategia_plc(plc,4,2)
+
     def test_campana_112_y_112_sin_escribir_entradas(self):
         c=self.c;d=self.d
         self.assertFalse(c.avanzar(d))

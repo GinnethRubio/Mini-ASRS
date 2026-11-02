@@ -32,6 +32,7 @@ Inventario_Listo Python_Error Deposito_Confirmado Manual_Permitido
 Manual_Orden Manual_Ack Ciclo_Terminado Crear_Sobre CICLO_AUTO Paso_Actual'''.split()
 OPC_NODES = {n: OPC_PREFIX+'GVL.'+n for n in NOMBRES_GVL}
 OPC_NODES.update({
+    'Estrategia': OPC_PREFIX+'GVL_HMI.iEstrategia',
     'QR_DETECTADO': OPC_PREFIX+'GVL.QR_Leido',
     'NUM_QR': OPC_PREFIX+'GVL.Codigo_QR',
     'Python_Mensaje': OPC_PREFIX+'GVL.Python_Mensaje',

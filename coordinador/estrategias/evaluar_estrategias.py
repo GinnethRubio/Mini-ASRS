@@ -1,4 +1,4 @@
-"""Evaluación del objetivo 4: estrategia base (0) frente a optimizada (1).
+"""Evaluación reproducible: secuencial (0), distancia (1) y tiempo (2).
 
 No requiere CoppeliaSim ni PLC. Usa las coordenadas reales del Excel (misma lectura
 que ControlPortico._cargar_coordenadas), la asignación de celdas de PLC_PRG con
@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import rutas  # noqa: E402,F401
+from estrategias_colocacion import elegir_celda, ESTRATEGIAS  # noqa: E402
 from config import (DATOS_DIR, POLL_INTERVAL, VEL_MAX_X, VEL_MAX_Y, VEL_MAX_Z,
                     ACEL_X, ACEL_Y, ACEL_Z)
 from control_portico import (ControlPortico, ARCHIVO_COORDENADAS, NUM_FILAS,
@@ -30,7 +31,6 @@ LLENADOS = (28, 56, 112)
 OCUPACION_INICIAL = 0.5
 SOBRES_ALEATORIO = 30
 SEMILLAS = range(1, 11)
-ESTRATEGIAS = {0: 'base', 1: 'optimizada'}
 CSV_OPERACIONES = DATOS_DIR / 'resultados_operaciones.csv'
 CSV_RESUMEN = DATOS_DIR / 'resultados_resumen.csv'
 
@@ -38,14 +38,6 @@ CSV_RESUMEN = DATOS_DIR / 'resultados_resumen.csv'
 def t_eje(distancia, eje):
     """Perfil del eje más la detección del fin en el siguiente sondeo (0 si no hay recorrido)."""
     return duracion_perfil(distancia, *CINEMATICA[eje]) + (T_SONDEO if distancia else 0.0)
-
-
-def elegir_celda(libres, estrategia, celdas):
-    if estrategia == 0:
-        return min(libres)
-    # Igual que el FOR del PLC con '<': ante empate gana el menor índice.
-    return min(libres, key=lambda i: (abs(celdas[i]['x'] - X_RECOGIDA)
-                                      + abs(celdas[i]['z_entrada'] - Z_RECOGIDA), i))
 
 
 def ciclo_almacenamiento(c):
@@ -120,8 +112,9 @@ def main():
 
     resumen = []
     for escenario in [f'llenado_{n}' for n in LLENADOS] + ['aleatorio_50']:
-        base, opt = (resumir(registro, escenario, e) for e in ESTRATEGIAS.values())
-        for r in (base, opt):
+        filas = [resumir(registro, escenario, e) for e in ESTRATEGIAS.values()]
+        base = filas[0]
+        for r in filas:
             r['reduccion_tiempo_pct'] = (base['t_ciclo_prom_s'] - r['t_ciclo_prom_s']) / base['t_ciclo_prom_s'] * 100
             r['reduccion_distancia_pct'] = (base['distancia_prom_mm'] - r['distancia_prom_mm']) / base['distancia_prom_mm'] * 100
             resumen.append(r)

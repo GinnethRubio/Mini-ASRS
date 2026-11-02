@@ -72,7 +72,9 @@ Mini-ASRS/
 │   │   ├── sincronizacion_escena.py     Reconstrucción de la ocupación desde la escena
 │   │   └── lector_qr.py          Lectura de QR desde el sensor de visión
 │   └── estrategias/
-│       └── evaluar_estrategias.py       Comparación de estrategias con el modelo de tiempos
+│       ├── estrategias_colocacion.py    Estrategias 0, 1 y 2 y verificación del destino elegido por el PLC
+│       ├── evaluar_estrategias.py       Comparación de estrategias con el modelo de tiempos
+│       └── test_estrategias_colocacion.py
 ├── datos/
 │   ├── Coordenadas_Rack_Mini_ASRS.xlsx  Coordenadas de las 112 celdas
 │   ├── inventario_plantilla.json        Rack vacío; se copia como inventario_mini_asrs.json en la primera ejecución
@@ -105,17 +107,31 @@ El coordinador y el banco se conectan al runtime CODESYS del mismo equipo (`opc.
 3. Ejecutar `python coordinador\diagnostico.py` para comprobar símbolos, inventario y coordenadas.
 4. Ejecutar `python coordinador\main.py`. El coordinador sincroniza el inventario con la escena y queda listo; la marcha se da desde la HMI.
 
+## Estrategias de asignación
+
+El PLC elige la celda de destino según `GVL_HMI.iEstrategia`, seleccionable en la HMI:
+
+| Valor | Estrategia | Criterio |
+|---|---|---|
+| 0 | Secuencial | Primera celda libre por índice |
+| 1 | Menor distancia | Menor suma de distancias X y Z desde la recogida |
+| 2 | Menor tiempo | Menor tiempo estimado de ida, apoyo y retorno con los perfiles trapezoidales de X y Z |
+
+En las tres, el empate se resuelve por el menor índice. Con la estrategia 2, `main.py` recalcula el costo antes de mover el pórtico y rechaza el destino si no empata con el mínimo entre las celdas libres; la comparación admite diferencias menores a 1 ms porque el PLC calcula en `REAL`. Las constantes `VX_MM_S`, `VZ_MM_S`, `AX_MM_S2` y `AZ_MM_S2` de `GVL_HMI` deben coincidir con `config.py` en mm, y el PLC publica `GVL_HMI.iVersionEstrategias = 2`, que el banco exige antes de iniciar una campaña con la estrategia 2.
+
+`python coordinador\estrategias\evaluar_estrategias.py` regenera `datos/resultados_*.csv`. Con los perfiles actuales (0,25 m/s y 0,5 m/s² en X y Z), las estrategias 1 y 2 eligen las mismas celdas; la 2 se diferencia cuando X y Z tienen velocidades o aceleraciones distintas.
+
 ## Banco de pruebas
 
 ```powershell
-# Cobertura de las 112 celdas con dobles de prueba, sin mover la escena
+# Almacenar y recuperar las 112 celdas con las tres estrategias (672 operaciones) con dobles de prueba, sin mover la escena
 python .\banco_pruebas_112\banco_112.py modelo
 
 # Registro OPC UA de solo lectura de lo que se opere desde la HMI
 python .\banco_pruebas_112\banco_112.py registrar
 
 # Campaña conectada: llenado de 112 sobres y 112 recuperaciones, por bloques
-python .\banco_pruebas_112\banco_112.py campana --estrategia 0 --confirmar-movimientos --inicio-runtime auto
+python .\banco_pruebas_112\banco_112.py campana --estrategia 2 --confirmar-movimientos --inicio-runtime auto
 ```
 
 La campaña conectada trabaja por bloques dentro del tiempo de funcionamiento del runtime CODESYS (`--limite-runtime-min`, 60 por defecto). Antes del límite envía un paro normal, espera el reposo confirmado del PLC y de los actuadores y guarda `continuar_campana.json`. `--reanudar` continúa la campaña desde ese punto. `banco_pruebas_112/temporizador_runtime.py` muestra el tiempo restante del runtime y avisa en los umbrales configurados.
@@ -125,6 +141,8 @@ Pruebas automatizadas:
 ```powershell
 cd banco_pruebas_112
 python -m unittest test_banco test_sesiones_runtime pruebas_fallas
+cd ..\coordinador\estrategias
+python -m unittest test_estrategias_colocacion
 ```
 
 ## Experimentos

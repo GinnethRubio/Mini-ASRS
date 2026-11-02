@@ -16,6 +16,7 @@ from lector_qr import leer_qr
 from recuperacion import Recuperacion
 from inventario import validar_inventario, marcar_deposito_confirmado
 from sincronizacion_escena import sincronizar_inventario
+from estrategias_colocacion import destino_compatible
 
 ORDENES = ('Ir_Recogida','Ir_Almacenamiento','Y_Extender','Y_Retraer','Z_Ajuste','G_Ajustar','G_Soltar')
 ORDENES = ORDENES + ('Ir_Despacho',)
@@ -76,6 +77,12 @@ class CoordinadorMiniASRS:
             coincidencias = [c for c in datos['celdas'] if int(c['columna']) == col and int(c['fila']) == fila]
             if len(coincidencias) != 1 or coincidencias[0]['ocupada'] or coincidencias[0].get('qr'):
                 raise RuntimeError('El destino elegido por el PLC no está libre en el JSON')
+            if int(self.plc.leer('Estrategia')) == 2:
+                # Verificar el contrato sin escribir el destino: el PLC sigue siendo su dueño.
+                geometria = {(c-1)*28+f: v for (c, f), v in self.portico.coordenadas.items()}
+                libres = [int(c['indice']) for c in datos['celdas'] if not c['ocupada']]
+                if not destino_compatible(libres, int(coincidencias[0]['indice']), geometria):
+                    raise RuntimeError('Estrategia 2 no coincide: revisar PLC, Excel y velocidades')
             self.celda_actual = coincidencias[0]
             self.portico.seleccionar_celda(col, fila)
             self.portico.ir_a_recogida(X_RECOGIDA, Z_RECOGIDA,

@@ -28,6 +28,18 @@ def fecha():
     return datetime.now(timezone.utc).isoformat(timespec='milliseconds')
 
 
+def verificar_estrategia_plc(plc, ns, estrategia):
+    if estrategia != 2:
+        return
+    try:
+        nodo = plc.client.get_node(f'ns={ns};s=|var|CODESYS Control Win V3.Application.GVL_HMI.iVersionEstrategias')
+        version = int(nodo.get_value())
+    except Exception as exc:
+        raise RuntimeError('Estrategia 2 requiere PLC actualizado y simbolo iVersionEstrategias publicado') from exc
+    if version != 2:
+        raise RuntimeError('Version de estrategias PLC incompatible')
+
+
 class Registro:
     def __init__(self, raiz, modo, proyecto, parametros):
         self.path = raiz / (datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_' + modo)
@@ -107,6 +119,7 @@ def modelo(args, log):
     import inventario as inv
     import recuperacion as rec
     from control_portico import ControlPortico, ARCHIVO_COORDENADAS
+    from estrategias_colocacion import ordenar_celdas
     coords = ControlPortico._cargar_coordenadas(ARCHIVO_COORDENADAS)
     if set(coords) != {(c, f) for c in range(1,5) for f in range(1,29)}:
         raise RuntimeError('El Excel no contiene las 112 celdas únicas esperadas')
@@ -119,11 +132,14 @@ def modelo(args, log):
     with (log.path/'operaciones_modelo.csv').open('w', newline='', encoding='utf-8-sig') as archivo:
         w = csv.DictWriter(archivo, fieldnames=campos); w.writeheader()
         for repeticion in range(1,args.repeticiones+1):
-            for estrategia in (0,1):
-                # Mismo desempate por índice que el PLC; cada celda usa inventario aislado.
-                orden = sorted(coords, key=lambda k: ((k[0]-1)*28+k[1] if estrategia==0 else
-                    abs(coords[k]['x']+.262)+abs(coords[k]['z_entrada']+.675), k))
-                for col, fila in orden:
+            for estrategia in (0,1,2):
+                # Orden de llenado de cada estrategia, con el mismo desempate por índice que el PLC.
+                por_indice = {(c-1)*28+f:v for (c,f),v in coords.items()}
+                orden = [((i-1)//28+1, (i-1)%28+1) for i in ordenar_celdas(por_indice, estrategia)]
+                for n, (col, fila) in enumerate(orden):
+                    # Las celdas anteriores del orden quedan ocupadas: el destino del PLC doble es
+                    # el que corresponde a la estrategia y main.py lo verifica cuando es la 2.
+                    previas = {(c,f):k for k,(c,f) in enumerate(orden[:n], 1)}
                     t = base.Tests('test_ciclo_completo_y_registro_al_final')
                     salida = io.StringIO()
                     try:
@@ -131,11 +147,12 @@ def modelo(args, log):
                             t.setUp()
                             datos=inv.validar_inventario(t.file)
                             for celda in datos['celdas']:
-                                celda.update(ocupada=False,qr='')
+                                k=previas.get((int(celda['columna']),int(celda['fila'])))
+                                celda.update(ocupada=k is not None,qr=f'AS-{900+k}' if k else '')
                             t.file.write_text(json.dumps(datos),encoding='utf-8')
                             patch.object(controlador,'validar_inventario',lambda:inv.validar_inventario(t.file)).start()
                             patch.object(controlador,'marcar_deposito_confirmado',lambda qr,i:inv.marcar_deposito_confirmado(qr,i,t.file)).start()
-                            t.plc.d.update(Columna_Destino=col,Fila_Destino=fila)
+                            t.plc.d.update(Columna_Destino=col,Fila_Destino=fila,Estrategia=estrategia)
                             t.c.qr_actual='AS-001'
                             t.c.banda=SimpleNamespace(sobre=6,qr='AS-001',_moviendo=False)
                             t.sim.pos[6]=list(rec.POSICION_FINAL)
@@ -207,16 +224,16 @@ def modelo(args, log):
     with (log.path/'pruebas_fallas.txt').open('w',encoding='utf-8') as f, contextlib.redirect_stdout(f):
         resultado=unittest.TextTestRunner(stream=f,verbosity=2,resultclass=Resultado).run(suite)
     correctas=[r for r in operaciones if r['resultado']=='correcto']
-    resumen=dict(modo='modelo',operaciones=len(operaciones),esperadas=448*args.repeticiones,
+    resumen=dict(modo='modelo',operaciones=len(operaciones),esperadas=672*args.repeticiones,
                  correctas=len(correctas),fallos=len(operaciones)-len(correctas),
                  pruebas_defensas=resultado.testsRun,defensas_correctas=resultado.wasSuccessful(),
                  celdas_almacenadas=len({(r['columna'],r['fila']) for r in correctas if r['operacion']=='almacenar'}),
                  celdas_recuperadas=len({(r['columna'],r['fila']) for r in correctas if r['operacion']=='recuperar'}),
-                 advertencia='Tiempos virtuales del controlador, sin esperas de PLC/FluidSIM/QR. No son resultados experimentales conectados. Cada celda se prueba aisladamente; no es llenado simultáneo de 112 sobres.')
+                 advertencia='Tiempos virtuales del controlador, sin esperas de PLC/FluidSIM/QR. No son resultados experimentales conectados. Cada celda se prueba con las anteriores del orden de la estrategia marcadas como ocupadas en el JSON; la escena doble solo contiene el sobre en curso.')
     log.json('resumen.json',resumen)
     estadisticas(log.path,operaciones,'tiempo_virtual_s','distancia_xz_m')
     ControlPortico._cargar_coordenadas = staticmethod(lectura_excel)
-    return 0 if len(correctas)==448*args.repeticiones and resultado.wasSuccessful() else 1
+    return 0 if len(correctas)==672*args.repeticiones and resultado.wasSuccessful() else 1
 
 
 class Campana:
@@ -327,6 +344,8 @@ def registrar(args, log):
         nodo=plc.client.get_node(f'ns={ns};s=|var|CODESYS Control Win V3.Application.'+n)
         nodo.set_value(ua.Variant(v,nodo.get_data_type_as_variant_type()))
     campana=Campana(escribir,log,args.estrategia,continuar=args.continuar) if args.modo=='campana' else None
+    if campana is not None:
+        verificar_estrategia_plc(plc, ns, args.estrategia)
     punto_previo=json.loads(args.reanudar.read_text(encoding='utf-8')) if getattr(args,'reanudar',None) else None
     def get(d,n):return d['GVL_HMI.'+n]
     try:
@@ -464,7 +483,8 @@ def main():
     ap.add_argument('--opc-url',default=os.environ.get('ASRS_OPC_URL') or 'opc.tcp://localhost:4840')
     ap.add_argument('--intervalo',type=float,default=.2)
     ap.add_argument('--duracion',type=float,default=0,help='Segundos; 0 registra hasta Ctrl+C')
-    ap.add_argument('--estrategia',type=int,choices=[0,1],default=0)
+    ap.add_argument('--estrategia',type=int,choices=[0,1,2],default=0,
+                    help='0 secuencial; 1 distancia; 2 tiempo (requiere PLC actualizado)')
     ap.add_argument('--confirmar-movimientos',action='store_true',help='Autoriza START/STOP y recuperación HMI en modo campaña')
     ap.add_argument('--continuar',action='store_true',help='Completar llenado desde inventario actual conservándolo; las celdas iniciales no tienen métricas nuevas')
     ap.add_argument('--inicio-runtime',help="Hora verificada de arranque del runtime, ISO 8601 con zona, o 'auto' para leerla del proceso CODESYS")
