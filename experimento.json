@@ -23,7 +23,7 @@
     "limite_runtime_min": 60,
     "margen_runtime_min": 10,
     "bloque_min": 45,
-    "espera_max_min": 60,
+    "espera_max_min": 0,
     "licencia": "CODESYS Control Win V3 y FluidSIM, licencias académicas del laboratorio"
   }
 }
