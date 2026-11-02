@@ -1,8 +1,8 @@
 # Arquitectura neumática e integración de señales
 
-## Alcance y procedencia
+## Alcance
 
-Descripción basada en el diagrama funcional de FluidSIM remitido como `Diagrama Mi ars.pdf` (una página). El PDF no se copia al repositorio. La descripción presenta los componentes y conexiones funcionales representados en el plano.
+Descripción de los componentes y conexiones funcionales del circuito electroneumático de FluidSIM del Mini AS/RS.
 
 ## Componentes representados
 
@@ -21,13 +21,13 @@ Descripción basada en el diagrama funcional de FluidSIM remitido como `Diagrama
 | 2M1 / 2M2 | Bobinas de la válvula 3/2 biestable | Mandan cierre / liberación de la pinza según asignación del plano |
 | S1 / S4 / S2 / S3 | Mandos marcha, recuperar, paro y rearme | Órdenes del operador; S1, S4 y S3 se indican NA, S2 NC |
 | S0 / K0 | Paro de emergencia y relé/confirmación de emergencia | Al accionar S0 cae K0; el PLC lee el estado de permiso de emergencia |
-| H1–H4 | Pilotos | Indican marcha, movimiento, recuperación y alarma |
+| H1 a H4 | Pilotos | Indican marcha, movimiento, recuperación y alarma |
 
-Las presiones de 6 bar y 4 bar son valores escritos en el diagrama remitido. No son mediciones de presión, criterios normativos ni valores de desempeño verificados.
+Las presiones de 6 bar y 4 bar son los valores nominales del circuito; no corresponden a mediciones ni a criterios normativos.
 
 ## Mapa de interconexión
 
-El dibujo asigna tres canales lógicos de comunicación de FluidSIM con el PLC:
+El circuito utiliza tres canales lógicos de comunicación de FluidSIM con el PLC:
 
 | Enlace representado | Contenido |
 |---|---|
@@ -35,7 +35,7 @@ El dibujo asigna tres canales lógicos de comunicación de FluidSIM con el PLC:
 | FluidSIM Out, módulo 1 puerto 2 → PLC `IN1` | Marcha S1, recuperar S4, paro S2, confirmación de emergencia K0, presión 0B1 y rearme S3 en bits 0–5 |
 | PLC `OUT0` → FluidSIM In, módulo 1 puerto 1 | Accionamientos 1M1, 1M2, 2M1 y 2M2 en bits 0–3; pilotos H1–H4 en bits 4–7 |
 
-El mapa lógico de entrada coincide con el texto de PLC: la confirmación K0 se asigna a `IN1.3`.
+La confirmación K0 corresponde a `IN1.3` tanto en el circuito como en el programa del PLC. El detalle por canal está en el [mapa de E/S y alarmas](mapa_io_y_errores.md).
 
 La cadena entre los subsistemas es:
 
@@ -62,7 +62,3 @@ FluidSIM modela las órdenes y confirmaciones del cilindro Y y de la pinza. Pyth
 7. Python desplaza X/Z hasta la celda de depósito o la estación de despacho.
 8. Se extiende Y, se ajusta Z cuando corresponde, se libera con 2M2 y se retrae Y.
 9. La operación registra el código QR asociado con la ubicación.
-
-## Versiones
-
-Las capturas de versiones aportadas identifican CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.67 Pneumática. El usuario indica que son licencias académicas del laboratorio de la Uniagustiniana.

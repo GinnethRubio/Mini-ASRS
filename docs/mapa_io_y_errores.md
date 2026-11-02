@@ -2,7 +2,7 @@
 
 ## Alcance
 
-Este documento transcribe el mapa lógico del texto de PLC y del diagrama funcional de FluidSIM aportados por el usuario. No es un plano de bornes ni confirma tensiones, modelos instalados o continuidad del cableado físico. El diagrama permite cotejar asignaciones funcionales, pero para energizar el equipo hay que verificar el proyecto descargado y el cableado real.
+Mapa lógico de entradas, salidas y alarmas según el programa del PLC y el circuito de FluidSIM. No es un plano de bornes ni describe tensiones, modelos de equipo o cableado físico; un montaje real requiere verificar el proyecto descargado y el cableado.
 
 ## Diagrama lógico de E/S
 
@@ -11,11 +11,11 @@ Este documento transcribe el mapa lógico del texto de PLC y del diagrama funcio
 flowchart LR
     subgraph IN["Entradas · FluidSIM"]
         direction TB
-        IN0["IN0 · finales<br/>de carrera<br/>bit 0<br/>Y retraído<br/>bit 1<br/>Y extendido<br/>bit 2<br/>Pinza abierta<br/>bit 3<br/>Pinza cerrada"]
-        IN1["IN1 · mandos<br/>y permisos<br/>bit 0 · marcha<br/>bit 1 · recuperar<br/>bit 2 · paro<br/>bit 3<br/>K0 emergencia<br/>bit 4 · presión<br/>bit 5 · rearme"]
+        IN0["<b>IN0 · finales de carrera</b><br/>bit 0 · Y retraído<br/>bit 1 · Y extendido<br/>bit 2 · pinza abierta<br/>bit 3 · pinza cerrada"]
+        IN1["<b>IN1 · mandos y permisos</b><br/>bit 0 · marcha<br/>bit 1 · recuperar<br/>bit 2 · paro<br/>bit 3 · K0 emergencia<br/>bit 4 · presión<br/>bit 5 · rearme"]
     end
-    PLC["CODESYS PLC<br/>secuencia<br/>interbloqueos"]
-    OUT["OUT0 · salidas<br/>FluidSIM<br/>bit 0<br/>Y extender<br/>bit 1<br/>Y retraer<br/>bit 2<br/>Pinza cerrar<br/>bit 3<br/>Pinza liberar<br/>bit 4 · H1 marcha<br/>bit 5<br/>H2 movimiento<br/>bit 6<br/>H3 recuperación<br/>bit 7 · H4 alarma"]
+    PLC["<b>CODESYS PLC</b><br/>secuencia<br/>interbloqueos"]
+    OUT["<b>OUT0 · salidas a FluidSIM</b><br/>bit 0 · Y extender<br/>bit 1 · Y retraer<br/>bit 2 · pinza cerrar<br/>bit 3 · pinza liberar<br/>bit 4 · H1 marcha<br/>bit 5 · H2 movimiento<br/>bit 6 · H3 recuperación<br/>bit 7 · H4 alarma"]
     IN0 -->|"estados"| PLC
     IN1 -->|"mandos"| PLC
     PLC -->|"órdenes"| OUT
@@ -55,7 +55,7 @@ IN1.6 e IN1.7 no tienen señal asignada en el mapa lógico mostrado.
 | OUT0.6 | H3 | Indicador de recuperación | Encendido en operación de recuperación |
 | OUT0.7 | H4 | Indicador de alarma | Encendido con alarma PLC; la lógica lo apaga si se pierde comunicación con FluidSIM |
 
-La lógica indica que las bobinas de actuador y varias órdenes de movimiento se desactivan ante alarma, emergencia, baja presión o pérdida de comunicación FluidSIM. Esta revisión de software no demuestra que el paro de emergencia sea una función de seguridad certificada: se necesita verificar el circuito independiente, hardware, categoría/PL requerido y análisis de riesgos.
+Las bobinas de actuador y varias órdenes de movimiento se desactivan ante alarma, emergencia, baja presión o pérdida de comunicación FluidSIM. El paro de emergencia simulado no constituye una función de seguridad certificada; una implementación física requiere un circuito independiente, hardware adecuado, la categoría o PL exigidos y un análisis de riesgos.
 
 ## Códigos de ventana de error y respuesta
 
@@ -83,11 +83,3 @@ El error genérico de Python puede incluir causas diferentes; el HMI aconseja re
 - Los actuadores neumáticos disponen de confirmación de fin de carrera; los movimientos coordinados esperan confirmaciones del sistema de escena y aplican límites de tiempo.
 - Las operaciones cubren recepción, identificación QR, selección de destino, recogida, depósito, actualización de inventario y recuperación/despacho. La recuperación puede quedar en cola si la máquina ya está ocupada.
 - El modo de simulación de CoppeliaSim emula señales y tiempos para pruebas funcionales. Esos ensayos no constituyen validación del hardware ni del circuito de seguridad.
-
-## Versiones y licencia del laboratorio
-
-Las capturas aportadas identifican CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.67 Pneumática (fecha mostrada: 19.02.2010). Según la información suministrada por el usuario, ambas instalaciones corresponden a licencias académicas del laboratorio de la Uniagustiniana. Las capturas no muestran titularidad, número de licencia, edición exacta del runtime ni configuración de OPC; esos detalles se deben verificar en los cuadros de licencia y en el proyecto instalado antes de reproducir el montaje.
-
-## Asignación de emergencia
-
-El texto de PLC y el diagrama funcional asignan la confirmación de emergencia K0 a IN1.3.

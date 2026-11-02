@@ -2,7 +2,6 @@
     "version": "2.0.0",
     "options": {
         "env": {
-            "ASRS_OPC_URL": "opc.tcp://localhost:4840",
             "PYTHONUTF8": "1"
         }
     },

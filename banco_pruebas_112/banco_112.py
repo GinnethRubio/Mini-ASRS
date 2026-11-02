@@ -1,7 +1,11 @@
 """Cobertura del controlador Python sin conexiones, y registro OPC UA de solo lectura.
 
-python banco_112.py modelo --proyecto RUTA --salida resultados
-python banco_112.py registrar --proyecto RUTA --salida resultados --opc-url opc.tcp://localhost:4840
+python banco_112.py modelo
+python banco_112.py registrar
+python banco_112.py campana --estrategia 0 --confirmar-movimientos --inicio-runtime auto
+
+Por defecto usa la carpeta del repositorio, guarda los logs en logs_112/ y se conecta al
+runtime CODESYS del mismo equipo (ASRS_OPC_URL permite indicar otro servidor).
 """
 import argparse
 import contextlib
@@ -453,10 +457,11 @@ def registrar(args, log):
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('modo',choices=['modelo','registrar','campana'])
-    ap.add_argument('--proyecto',type=Path,required=True)
-    ap.add_argument('--salida',type=Path,default=Path('logs_banco_112'))
+    raiz=Path(__file__).resolve().parent.parent
+    ap.add_argument('--proyecto',type=Path,default=raiz)
+    ap.add_argument('--salida',type=Path,default=raiz/'logs_112')
     ap.add_argument('--repeticiones',type=int,default=1)
-    ap.add_argument('--opc-url',default='opc.tcp://localhost:4840')
+    ap.add_argument('--opc-url',default=os.environ.get('ASRS_OPC_URL') or 'opc.tcp://localhost:4840')
     ap.add_argument('--intervalo',type=float,default=.2)
     ap.add_argument('--duracion',type=float,default=0,help='Segundos; 0 registra hasta Ctrl+C')
     ap.add_argument('--estrategia',type=int,choices=[0,1],default=0)

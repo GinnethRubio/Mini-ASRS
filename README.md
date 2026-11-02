@@ -2,12 +2,12 @@
 
 Coordinación en Python del sistema automatizado de almacenamiento y recuperación de sobres Mini AS/RS: rack de 4 columnas × 28 filas (112 posiciones), pórtico cartesiano con ejes X/Z eléctricos, eje Y y sujetador neumáticos, banda de entrada, banda de salida e identificación por código QR.
 
-
 ## Video demostrativo
 
 Haz clic en la captura para abrir el video en Google Drive.
 
 [![Captura de la HMI del Mini AS/RS](docs/media/captura_hmi_mini_asrs.png)](https://drive.google.com/file/d/13d0R-Bz9BVPwiDQlmKT5-XTVxBPbAl1q/view?usp=sharing)
+
 ## Arquitectura
 
 | Componente | Función | Enlace |
@@ -33,43 +33,22 @@ flowchart LR
     classDef app fill:#e9f7ef,stroke:#2f855a,color:#173b2a;
     class HMI,PLC,FS,SIM external;
     class PY app;
-
 ```
 
-La banda de salida está implementada en `coordinador/movimiento/control_banda_salida.py` y es utilizada por el módulo de recuperación.
 ### Circuito neumático e integración
 
-El circuito de FluidSIM representa el eje Y y la pinza neumática. El suministro comprende compresor 0P1, unidad de mantenimiento indicada a 6 bar y presostato 0B1 indicado a 4 bar. El cilindro de doble efecto 1A1 mueve Y mediante válvula 5/2 biestable, reguladores de caudal y finales de carrera 1B1/1B2. El actuador de simple efecto 1A2 acciona la pinza por válvula 3/2 biestable, con regulación de caudal y sensores 2B1/2B2. S1/S4/S2/S3 gestionan marcha, recuperación, paro y rearme; S0/K0 informa el estado de emergencia. H1–H4 señalan marcha, movimiento, recuperación y alarma.
+El circuito de FluidSIM representa el eje Y y la pinza neumática. El suministro comprende compresor 0P1, unidad de mantenimiento indicada a 6 bar y presostato 0B1 indicado a 4 bar. El cilindro de doble efecto 1A1 mueve Y mediante válvula 5/2 biestable, reguladores de caudal y finales de carrera 1B1/1B2. El actuador de simple efecto 1A2 acciona la pinza por válvula 3/2 biestable, con regulación de caudal y sensores 2B1/2B2. S1/S4/S2/S3 gestionan marcha, recuperación, paro y rearme; S0/K0 informa el estado de emergencia. H1 a H4 señalan marcha, movimiento, recuperación y alarma.
 
-FluidSIM intercambia señales con el PLC por OPC DA: posiciones y mandos llegan por `IN0`/`IN1`, y órdenes de válvula y pilotos salen por `OUT0`. Python enlaza con el PLC por OPC UA y con CoppeliaSim por ZeroMQ Remote API. En la co-simulación, el PLC y FluidSIM modelan las órdenes y confirmaciones neumáticas de Y y la pinza; Python refleja esos movimientos en la planta 3D de CoppeliaSim y ejecuta allí la cinemática X/Z, las bandas y la identificación QR. Los ejes X/Z están representados en la escena virtual. El [detalle del circuito e interconexión](docs/arquitectura_neumatica.md) resume los componentes y la interconexión.
+FluidSIM intercambia señales con el PLC por OPC DA: posiciones y mandos llegan por `IN0`/`IN1`, y órdenes de válvula y pilotos salen por `OUT0`. Python enlaza con el PLC por OPC UA y con CoppeliaSim por ZeroMQ Remote API. En la co-simulación, el PLC y FluidSIM modelan las órdenes y confirmaciones neumáticas de Y y la pinza; Python refleja esos movimientos en la planta 3D de CoppeliaSim y ejecuta allí la cinemática X/Z, las bandas y la identificación QR. El [detalle del circuito](docs/arquitectura_neumatica.md) describe los componentes y la interconexión.
 
-El flujo funcional recibe e identifica el sobre, asigna celda, lo recoge con Y y la pinza, lo desplaza por X/Z, deposita o despacha y actualiza el inventario QR. Los valores de presión del plano describen la configuración nominal representada en la simulación.
-### Diagrama lógico de entradas y salidas
+El flujo funcional recibe e identifica el sobre, asigna celda, lo recoge con Y y la pinza, lo desplaza por X/Z, deposita o despacha y actualiza el inventario QR. Las presiones indicadas son los valores nominales del circuito simulado.
 
-```mermaid
-%%{init: {"flowchart": {"htmlLabels": true, "nodeSpacing": 70, "rankSpacing": 90, "curve": "linear", "padding": 16}, "themeVariables": {"fontSize": "14px"}}}%%
-flowchart LR
-    subgraph IN["Entradas · FluidSIM"]
-        direction TB
-        IN0["IN0 · finales<br/>de carrera<br/>bit 0<br/>Y retraído<br/>bit 1<br/>Y extendido<br/>bit 2<br/>Pinza abierta<br/>bit 3<br/>Pinza cerrada"]
-        IN1["IN1 · mandos<br/>y permisos<br/>bit 0 · marcha<br/>bit 1 · recuperar<br/>bit 2 · paro<br/>bit 3<br/>K0 emergencia<br/>bit 4 · presión<br/>bit 5 · rearme"]
-    end
-    PLC["CODESYS PLC<br/>secuencia<br/>interbloqueos"]
-    OUT["OUT0 · salidas<br/>FluidSIM<br/>bit 0<br/>Y extender<br/>bit 1<br/>Y retraer<br/>bit 2<br/>Pinza cerrar<br/>bit 3<br/>Pinza liberar<br/>bit 4 · H1 marcha<br/>bit 5<br/>H2 movimiento<br/>bit 6<br/>H3 recuperación<br/>bit 7 · H4 alarma"]
-    IN0 -->|"estados"| PLC
-    IN1 -->|"mandos"| PLC
-    PLC -->|"órdenes"| OUT
-    classDef io fill:#eef4ff,stroke:#4263a5,color:#172b4d;
-    classDef logic fill:#e9f7ef,stroke:#2f855a,color:#173b2a;
-    class IN0,IN1,OUT io;
-    class PLC logic;
-```
+### Entradas y salidas
 
-El detalle canal por canal y la tabla de errores con acciones de recuperación están en [el mapa lógico de E/S y alarmas](docs/mapa_io_y_errores.md).
+FluidSIM entrega al PLC los finales de carrera del eje Y y de la pinza por `IN0` y los mandos y permisos (marcha, recuperar, paro, emergencia, presión y rearme) por `IN1`. El PLC devuelve por `OUT0` las órdenes de las válvulas y los pilotos H1 a H4. El diagrama, el detalle canal por canal y la tabla de alarmas con su acción de recuperación están en el [mapa de E/S y alarmas](docs/mapa_io_y_errores.md).
 
-Versiones identificadas en el laboratorio: CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.67 Pneumática. Según la información del usuario, corresponden a licencias académicas del laboratorio de la Uniagustiniana.
+La descripción ampliada de funciones, flujo de datos, heartbeat y campañas, junto con las versiones de software utilizadas, está en [funcionamiento y arquitectura](docs/funcionamiento_y_arquitectura.md).
 
-La descripción ampliada de funciones, flujo de datos, heartbeat y campañas está en [funcionamiento y arquitectura](docs/funcionamiento_y_arquitectura.md).
 ## Estructura
 
 ```text
@@ -115,26 +94,28 @@ py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-En VS Code, las tareas de `.vscode/tasks.json` crean el entorno, ejecutan el diagnóstico y lanzan el coordinador. La dirección del servidor OPC UA se define con `ASRS_OPC_URL`. El valor por defecto del código es `opc.tcp://192.168.0.21:4840`; las tareas de VS Code lo reemplazan por `opc.tcp://localhost:4840`. Ajusta la tarea al endpoint real del runtime antes de conectar.
+En VS Code, las tareas de `.vscode/tasks.json` crean el entorno, ejecutan el diagnóstico y lanzan el coordinador.
+
+El coordinador y el banco se conectan al runtime CODESYS del mismo equipo (`opc.tcp://localhost:4840`) y a CoppeliaSim en su puerto local por defecto, de modo que basta con clonar el repositorio y ejecutarlo en el equipo donde corren las tres aplicaciones. Las rutas de datos se resuelven desde la carpeta del repositorio. Solo si CODESYS está en otro equipo se define la variable de entorno `ASRS_OPC_URL` con su dirección.
 
 ## Ejecución
 
 1. Descargar el proyecto CODESYS al runtime y dejar el PLC en espera, detenido y sin órdenes.
 2. Abrir la escena en CoppeliaSim y FluidSIM con el enlace OPC DA activo.
-3. Ejecutar `python coordinador\\diagnostico.py` para comprobar símbolos, inventario y coordenadas.
-4. Ejecutar `python coordinador\\main.py`. El coordinador sincroniza el inventario con la escena y queda listo; la marcha se da desde la HMI.
+3. Ejecutar `python coordinador\diagnostico.py` para comprobar símbolos, inventario y coordenadas.
+4. Ejecutar `python coordinador\main.py`. El coordinador sincroniza el inventario con la escena y queda listo; la marcha se da desde la HMI.
 
 ## Banco de pruebas
 
 ```powershell
 # Cobertura de las 112 celdas con dobles de prueba, sin mover la escena
-python .\banco_pruebas_112\banco_112.py modelo --proyecto . --salida .\logs_112
+python .\banco_pruebas_112\banco_112.py modelo
 
 # Registro OPC UA de solo lectura de lo que se opere desde la HMI
-python .\banco_pruebas_112\banco_112.py registrar --proyecto . --salida .\logs_112
+python .\banco_pruebas_112\banco_112.py registrar
 
 # Campaña conectada: llenado de 112 sobres y 112 recuperaciones, por bloques
-python .\banco_pruebas_112\banco_112.py campana --proyecto . --salida .\logs_112 --estrategia 0 --confirmar-movimientos --inicio-runtime auto
+python .\banco_pruebas_112\banco_112.py campana --estrategia 0 --confirmar-movimientos --inicio-runtime auto
 ```
 
 La campaña conectada trabaja por bloques dentro del tiempo de funcionamiento del runtime CODESYS (`--limite-runtime-min`, 60 por defecto). Antes del límite envía un paro normal, espera el reposo confirmado del PLC y de los actuadores y guarda `continuar_campana.json`. `--reanudar` continúa la campaña desde ese punto. `banco_pruebas_112/temporizador_runtime.py` muestra el tiempo restante del runtime y avisa en los umbrales configurados.

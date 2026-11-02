@@ -4,7 +4,8 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DATOS_DIR = PROJECT_DIR / 'datos'
 JSON_PATH = DATOS_DIR / 'inventario_mini_asrs.json'
-OPC_URL = os.environ.get('ASRS_OPC_URL', 'opc.tcp://192.168.0.21:4840')
+# Runtime CODESYS del mismo equipo; ASRS_OPC_URL permite apuntar a otro servidor.
+OPC_URL = os.environ.get('ASRS_OPC_URL') or 'opc.tcp://localhost:4840'
 OPC_TIMEOUT = 5
 POLL_INTERVAL = 0.2
 NUM_CELDAS = 112

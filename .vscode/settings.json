@@ -1,7 +1,6 @@
 {
     "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
     "terminal.integrated.env.windows": {
-        "ASRS_OPC_URL": "opc.tcp://localhost:4840",
         "PYTHONUTF8": "1"
     },
     "python.terminal.activateEnvironment": true

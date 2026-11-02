@@ -40,4 +40,6 @@ Los resultados de esta campaña describen el modelo temporal utilizado en el exp
 - FluidSIM 4.2p/1.67 Pneumática con comunicación OPC DA.
 - CoppeliaSim con la escena del Mini AS/RS y ZeroMQ Remote API.
 
-Las capturas identifican CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.67 Pneumática. Según la información del usuario, ambos corresponden a licencias académicas del laboratorio de la Uniagustiniana.
+## Versiones de software
+
+CODESYS V3.5 SP9 Patch 1+ y FluidSIM 4.2p/1.67 Pneumática, con licencias académicas del laboratorio de la Universitaria Agustiniana.
