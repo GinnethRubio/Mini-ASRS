@@ -170,7 +170,7 @@ El resumen de cada ejecución queda en `datos_experimentos/ejecuciones/<fecha>/r
 
 ### Contraste integrado R vs C
 
-`banco_pruebas_112/contraste_rc.py` ejecuta en el sistema integrado las mismas parejas recuperar + almacenar del modelo rápido: igual inventario inicial, igual secuencia de solicitudes y, para R, la misma selección aleatoria, generados con `SeedSequence(contraste.semilla)`. Por cada ocupación K y réplica se corren R y luego C, con `contraste.parejas` parejas medidas cada una. Antes de cada corrida el rack se lleva al inventario inicial con recuperaciones y almacenamientos reales, registrados como corridas `prep_` de diagnóstico.
+`banco_pruebas_112/contraste_rc.py` ejecuta en el sistema integrado las mismas parejas recuperar + almacenar del modelo rápido: igual inventario inicial, igual secuencia de solicitudes y, para R, la misma selección aleatoria, generados con `SeedSequence(contraste.semilla)`. Por cada ocupación K y réplica se corren R y C, en orden alternado entre réplicas (R-C en las impares, C-R en las pares) para compensar la deriva de tiempos del sistema, con `contraste.parejas` parejas medidas cada una. Antes de cada corrida el rack se lleva al inventario inicial con recuperaciones y almacenamientos reales, registrados como corridas `prep_` de diagnóstico.
 
 Cada almacenamiento usa la estrategia 3: Python decide la celda (aleatoria uniforme o de mínimo costo) y el PLC la ejecuta. El progreso queda en `logs_112/estado_contraste_<campaña>.json`; si el tiempo del runtime no alcanza para la corrida siguiente, el bloque se cierra en reposo, y una corrida interrumpida por desconexión se repite completa con sufijo `_i2`. El supervisor ejecuta el contraste con el mismo esquema de bloques y reconexión:
 

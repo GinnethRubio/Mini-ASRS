@@ -134,8 +134,9 @@ class Pruebas(unittest.TestCase):
         self.assertEqual(plan, cr.plan_contraste(20261103, [28, 56, 84], 2, 10))
         self.assertEqual(len(plan), 12)
         costo = costos_c(cargar_celdas(), 'tiempo')
-        for r, c in zip(plan[::2], plan[1::2]):
-            self.assertEqual((r['politica'], c['politica']), ('R', 'C'))
+        for a, b in zip(plan[::2], plan[1::2]):
+            self.assertEqual((a['politica'], b['politica']), ('R', 'C') if a['replica'] % 2 else ('C', 'R'))
+            r, c = (a, b) if a['politica'] == 'R' else (b, a)
             self.assertEqual(r['inicial'], c['inicial'])
             self.assertEqual(len(r['inicial']), r['ocupacion'])
             self.assertEqual(len(c['operaciones']), 20)
@@ -200,6 +201,15 @@ class Pruebas(unittest.TestCase):
         self.assertAlmostEqual(par['RETRIEVE']['b'], 1.1, places=6)
         self.assertAlmostEqual(aplicar(par, 'STORE', 20), 25.0, places=6)
         self.assertEqual(aplicar(None, 'STORE', 20), 20)
+
+    def test_salta_corridas_completas_aunque_cambie_el_orden(self):
+        plan = cr.plan_contraste(7, [3], 2, 2)
+        plc = PLCSimulado()
+        c = self.contraste(plc, plan)
+        c.completadas_externas = lambda: {'prueba_rcC_K003_r01_R', 'prueba_rcC_K003_r02_R'}
+        self.assertEqual(c.ejecutar(), 0)
+        hechas = sorted(r['run_id'] for r in self.indice() if r['run_id'].startswith('prueba_rcC'))
+        self.assertEqual(hechas, ['prueba_rcC_K003_r01_C', 'prueba_rcC_K003_r02_C'])
 
     def test_vaciado_deja_el_rack_vacio(self):
         plc = PLCSimulado([3, 40, 90])

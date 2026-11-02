@@ -52,7 +52,9 @@ def plan_contraste(semilla, ocupaciones, replicas, parejas, costo_c='tiempo'):
     for k, sk in zip(ocupaciones, np.random.SeedSequence(semilla).spawn(len(ocupaciones))):
         for replica, sr in enumerate(sk.spawn(replicas), 1):
             semillas = sr.spawn(3)
-            for politica in ('R', 'C'):  # R primero; la transición devuelve el rack al inicial antes de C
+            # Orden alternado por réplica (R-C, C-R) para que la deriva del sistema durante la
+            # campaña no favorezca a una política; la transición restituye el inventario inicial.
+            for politica in (('R', 'C') if replica % 2 else ('C', 'R')):
                 # Mismo inventario inicial y mismos primeros valores de demanda que la réplica del modelo.
                 iniciales, _ = generar_entradas(k, [np.random.default_rng(s) for s in semillas], 0)
                 fracciones = np.random.default_rng(semillas[1]).random(parejas)
@@ -183,8 +185,10 @@ class Ejecutor:
 
 
 class Contraste:
-    def __init__(self, args, ejecutor, plan, estado_path, nuevo_registro, ventana, log, reloj=time.monotonic):
+    def __init__(self, args, ejecutor, plan, estado_path, nuevo_registro, ventana, log, reloj=time.monotonic,
+                 completadas=None):
         self.args, self.ejecutor, self.plan = args, ejecutor, plan
+        self.completadas_externas = completadas
         self.estado_path, self.nuevo_registro, self.ventana = Path(estado_path), nuevo_registro, ventana
         self.log, self.reloj = log, reloj
         try:
@@ -206,6 +210,15 @@ class Contraste:
         rx, rz = recorridos(self.celdas[op['celda']], op['tipo'])
         return round(rx, 1), round(rz, 1)
 
+    def base(self, corrida):
+        return f"{self.args.campana}_K{corrida['ocupacion']:03d}_r{corrida['replica']:02d}_{corrida['politica']}"
+
+    def completadas(self):
+        hechas = set(self.estado.get('completas', []))
+        if self.completadas_externas is not None:
+            hechas |= self.completadas_externas()
+        return hechas
+
     def ocupadas(self):
         return sorted(i + 1 for i, o in enumerate(self.ejecutor.leer()['GVL_HMI.axOcupada']) if o)
 
@@ -226,8 +239,13 @@ class Contraste:
         self.guardar()
         preparacion = None
         try:
-            while self.estado['siguiente'] < len(self.plan):
-                i = self.estado['siguiente']
+            while True:
+                # Las corridas se identifican por K, réplica y política, no por su posición en el plan.
+                hechas = self.completadas()
+                pendientes = [j for j, c in enumerate(self.plan) if self.base(c) not in hechas]
+                if not pendientes:
+                    break
+                i = pendientes[0]
                 corrida = self.plan[i]
                 # La transición es preparación: puede repartirse entre bloques del runtime.
                 for op in transicion(self.ocupadas(), corrida['inicial']):
@@ -242,12 +260,18 @@ class Contraste:
                 if not self.cabe(len(corrida['operaciones'])):
                     self.log('bloque_cerrado', motivo='tiempo de runtime insuficiente para la corrida', siguiente=i)
                     return 3
-                intento = self.estado['intentos'].get(str(i), 0) + 1
-                self.estado['intentos'][str(i)] = intento
+                base = self.base(corrida)
+                intento = self.estado['intentos'].get(base, 0)
+                while True:
+                    intento += 1
+                    run_id = base + (f'_i{intento}' if intento > 1 else '')
+                    try:
+                        registro = self.nuevo_registro(run_id, corrida)
+                        break
+                    except FileExistsError:
+                        continue    # intento previo registrado por otro bloque
+                self.estado['intentos'][base] = intento
                 self.guardar()
-                run_id = (f"{self.args.campana}_K{corrida['ocupacion']:03d}_r{corrida['replica']:02d}"
-                          f"_{corrida['politica']}" + (f'_i{intento}' if intento > 1 else ''))
-                registro = self.nuevo_registro(run_id, corrida)
                 try:
                     for op in corrida['operaciones']:
                         self.registrar(registro, op, self.ejecutor.ejecutar(op), 'medida', dict(pareja=op['pareja']))
@@ -256,9 +280,10 @@ class Contraste:
                     registro.cerrar('incompleta')
                     raise
                 registro.cerrar('completa')
-                self.estado['siguiente'] = i + 1
+                self.estado.setdefault('completas', []).append(self.base(corrida))
+                self.estado['siguiente'] = len(self.estado['completas'])
                 self.guardar()
-                self.log('corrida_completa', run_id=run_id, siguiente=i + 1, total=len(self.plan))
+                self.log('corrida_completa', run_id=run_id, completas=len(self.estado['completas']), total=len(self.plan))
             # Rack vacío al final: deja el sistema listo para la campaña de cobertura.
             for op in transicion(self.ocupadas(), []) if getattr(self.args, 'vaciar', False) else []:
                 if not self.cabe(1):
@@ -356,9 +381,19 @@ def main():
                        escenario=dict(campana=args.campana, parejas=c['parejas'], logs=str(carpeta)),
                        licencia=p['conectado']['licencia'],
                        alcance='Contraste integrado CODESYS-FluidSIM-CoppeliaSim; destino propuesto por Python (estrategia 3).')
+    def completadas():
+        """Corridas completas de la campaña según el índice del registro experimental."""
+        import csv
+        import re
+        indice = args.datos / 'registro_corridas.csv'
+        if not indice.exists():
+            return set()
+        with indice.open(encoding='utf-8') as f:
+            return {re.sub(r'_i\d+$', '', r['run_id']) for r in csv.DictReader(f)
+                    if r['estado'] == 'completa' and r['run_id'].startswith(args.campana + '_K')}
     estado_path = args.estado or (args.salida / f'estado_contraste_{args.campana}.json')
     contraste = Contraste(args, Ejecutor(leer, escribir, log, espera_comunicacion_s=args.espera_comunicacion_s),
-                          plan, estado_path, nuevo_registro, ventana, log)
+                          plan, estado_path, nuevo_registro, ventana, log, completadas=completadas)
     try:
         codigo = contraste.ejecutar()
         if codigo == 3:
