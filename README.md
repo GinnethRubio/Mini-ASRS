@@ -80,7 +80,7 @@ Mini-ASRS/
 │   ├── inventario_plantilla.json        Rack vacío; se copia como inventario_mini_asrs.json en la primera ejecución
 │   ├── QR_Mini_ASRS/                    Códigos QR AS-001 a AS-112
 │   └── resultados_*.csv                 Salida de evaluar_estrategias.py
-├── banco_pruebas_112/            Banco de pruebas de 112 posiciones: modelo, registro OPC UA y campaña por bloques
+├── banco_pruebas_112/            Banco de pruebas de 112 posiciones: modelo, registro OPC UA, campaña por bloques y contraste R vs C
 ├── experimentos/                 Campaña pareada R/C, registro experimental y análisis
 └── docs/                         Arquitectura, mapa de E/S, alarmas y funcionamiento
 ```
@@ -116,8 +116,11 @@ El PLC elige la celda de destino según `GVL_HMI.iEstrategia`, seleccionable en 
 | 0 | Secuencial | Primera celda libre por índice |
 | 1 | Menor distancia | Menor suma de distancias X y Z desde la recogida |
 | 2 | Menor tiempo | Menor tiempo estimado de ida, apoyo y retorno con los perfiles trapezoidales de X y Z |
+| 3 | Destino propuesto | Celda escrita por Python en `GVL_HMI.iDestinoPropuesto`; el PLC verifica que esté libre y la acepta una sola vez por solicitud |
 
-En las tres, el empate se resuelve por el menor índice. Con la estrategia 2, `main.py` recalcula el costo antes de mover el pórtico y rechaza el destino si no empata con el mínimo entre las celdas libres; la comparación admite diferencias menores a 1 ms porque el PLC calcula en `REAL`. Las constantes `VX_MM_S`, `VZ_MM_S`, `AX_MM_S2` y `AZ_MM_S2` de `GVL_HMI` deben coincidir con `config.py` en mm, y el PLC publica `GVL_HMI.iVersionEstrategias = 2`, que el banco exige antes de iniciar una campaña con la estrategia 2.
+En las estrategias 0 a 2, el empate se resuelve por el menor índice. Con la estrategia 2, `main.py` recalcula el costo antes de mover el pórtico y rechaza el destino si no empata con el mínimo entre las celdas libres; la comparación admite diferencias menores a 1 ms porque el PLC calcula en `REAL`. Las constantes `VX_MM_S`, `VZ_MM_S`, `AX_MM_S2` y `AZ_MM_S2` de `GVL_HMI` deben coincidir con `config.py` en mm, y el PLC publica `GVL_HMI.iVersionEstrategias = 3`, que el banco exige antes de iniciar una campaña con las estrategias 2 o 3.
+
+La estrategia 3 permite ejecutar en el sistema integrado políticas decididas fuera del PLC. Python escribe la celda en `iDestinoPropuesto` e incrementa `uSolicitudDestino`; el PLC la acepta si está libre y copia el número en `uSolicitudAceptada`. Una celda ocupada o una solicitud ya usada detienen el ciclo con la alarma `DESTINO PROPUESTO INVALIDO`.
 
 `python coordinador\estrategias\evaluar_estrategias.py` regenera `datos/resultados_*.csv`. Con los perfiles actuales (0,25 m/s y 0,5 m/s² en X y Z), las estrategias 1 y 2 eligen las mismas celdas; la 2 se diferencia cuando X y Z tienen velocidades o aceleraciones distintas.
 
@@ -140,7 +143,7 @@ Pruebas automatizadas:
 
 ```powershell
 cd banco_pruebas_112
-python -m unittest test_banco test_sesiones_runtime test_supervisor pruebas_fallas
+python -m unittest test_banco test_sesiones_runtime test_supervisor test_contraste pruebas_fallas
 cd ..\coordinador\estrategias
 python -m unittest test_estrategias_colocacion
 ```
@@ -149,7 +152,8 @@ python -m unittest test_estrategias_colocacion
 
 ```powershell
 python experimento.py               # fases A, E y B, sin conexión
-python experimento.py --conectado   # además la fase D con CODESYS, FluidSIM y CoppeliaSim
+python experimento.py --conectado   # además las fases D y C con CODESYS, FluidSIM y CoppeliaSim
+python experimento.py --fases C --campana-contraste <id>   # continuar un contraste integrado
 ```
 
 El protocolo se fija en `experimento.json` antes de ejecutar (diferencia mínima relevante, semillas, réplicas, ocupaciones y parámetros del runtime) y su hash queda en cada corrida. Las fases se ejecutan en orden:
@@ -160,8 +164,21 @@ El protocolo se fija en `experimento.json` antes de ejecutar (diferencia mínima
 | E | Fallos y recuperación del controlador con dobles de prueba |
 | B | Piloto R vs C, tamaño de muestra con `delta_min_s`, campaña final con semilla nueva y análisis pareado |
 | D | Llenado de 112 sobres y 112 recuperaciones en el sistema integrado, con el supervisor de campaña |
+| C | Contraste integrado R vs C con destino propuesto, análisis pareado y contraste modelo vs integrado |
 
-El resumen de cada ejecución queda en `datos_experimentos/ejecuciones/<fecha>/resumen.json`.
+El resumen de cada ejecución queda en `datos_experimentos/ejecuciones/<fecha>/resumen.json`. Las fases sin conexión tardan alrededor de un minuto; la D, entre 2 y 2,5 horas, y la C, entre 6 y 8 horas con los parámetros de `experimento.json`, incluidos los reinicios del runtime.
+
+### Contraste integrado R vs C
+
+`banco_pruebas_112/contraste_rc.py` ejecuta en el sistema integrado las mismas parejas recuperar + almacenar del modelo rápido: igual inventario inicial, igual secuencia de solicitudes y, para R, la misma selección aleatoria, generados con `SeedSequence(contraste.semilla)`. Por cada ocupación K y réplica se corren R y luego C, con `contraste.parejas` parejas medidas cada una. Antes de cada corrida el rack se lleva al inventario inicial con recuperaciones y almacenamientos reales, registrados como corridas `prep_` de diagnóstico.
+
+Cada almacenamiento usa la estrategia 3: Python decide la celda (aleatoria uniforme o de mínimo costo) y el PLC la ejecuta. El progreso queda en `logs_112/estado_contraste_<campaña>.json`; si el tiempo del runtime no alcanza para la corrida siguiente, el bloque se cierra en reposo, y una corrida interrumpida por desconexión se repite completa con sufijo `_i2`. El supervisor ejecuta el contraste con el mismo esquema de bloques y reconexión:
+
+```powershell
+python .\banco_pruebas_112\supervisor_campana.py --modo contraste --confirmar-movimientos
+```
+
+Con las corridas completas, `analizar_experimentos.py pareado --campana <id>` produce la diferencia R − C con su intervalo de confianza y `contraste --campana <id>` compara cada tiempo integrado con el del modelo.
 
 ### Supervisor de la campaña conectada
 
@@ -182,7 +199,7 @@ Cada evento queda en `logs_112/<fecha>_supervisor/` (`supervisor.jsonl`, `estado
 python .\experimentos\campana_rc.py --replicas 10
 python .\experimentos\analizar_experimentos.py pareado --campana <id_campana>
 python .\experimentos\analizar_experimentos.py potencia --campana <id_piloto> --delta 1.0
-python .\experimentos\analizar_experimentos.py contraste --corridas <run_id> [<run_id> ...]
+python .\experimentos\analizar_experimentos.py contraste --campana <id_integrada>
 python .\experimentos\analizar_experimentos.py verificar
 ```
 

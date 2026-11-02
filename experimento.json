@@ -10,6 +10,14 @@
   "replicas_maximas": 200,
   "semilla_piloto": 20261101,
   "semilla_final": 20261102,
+  "contraste": {
+    "semilla": 20261103,
+    "replicas": 2,
+    "parejas": 10,
+    "t_operacion_estimado_s": 40,
+    "tolerancia_abs_s": 0.5,
+    "tolerancia_rel": 0.05
+  },
   "conectado": {
     "estrategia": 2,
     "limite_runtime_min": 60,

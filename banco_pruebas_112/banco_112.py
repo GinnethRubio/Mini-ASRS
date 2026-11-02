@@ -29,14 +29,15 @@ def fecha():
 
 
 def verificar_estrategia_plc(plc, ns, estrategia):
-    if estrategia != 2:
+    """Las estrategias 2 y 3 exigen un PLC que publique iVersionEstrategias igual o superior."""
+    if estrategia < 2:
         return
     try:
         nodo = plc.client.get_node(f'ns={ns};s=|var|CODESYS Control Win V3.Application.GVL_HMI.iVersionEstrategias')
         version = int(nodo.get_value())
     except Exception as exc:
-        raise RuntimeError('Estrategia 2 requiere PLC actualizado y simbolo iVersionEstrategias publicado') from exc
-    if version != 2:
+        raise RuntimeError(f'Estrategia {estrategia} requiere PLC actualizado y simbolo iVersionEstrategias publicado') from exc
+    if version < estrategia:
         raise RuntimeError('Version de estrategias PLC incompatible')
 
 

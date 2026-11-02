@@ -194,9 +194,14 @@ def contraste(args):
     from evaluar_estrategias import ciclo_almacenamiento
     raiz = args.raiz
     celdas = {(c['columna'], c['fila']): c for c in cargar_celdas().values()}
-    sel = corridas(raiz, lambda r: r['run_id'] in args.corridas)
-    if len(sel) != len(args.corridas):
-        raise SystemExit('Corridas no encontradas en el índice')
+    if args.campana:
+        sel = corridas(raiz, lambda r: r['run_id'].startswith(args.campana) and r['estado'] == 'completa')
+    else:
+        sel = corridas(raiz, lambda r: r['run_id'] in args.corridas)
+        if len(sel) != len(args.corridas):
+            raise SystemExit('Corridas no encontradas en el índice')
+    if not sel:
+        raise SystemExit('Sin corridas para contrastar')
     filas, entradas = [], []
     for r in sel:
         p = raiz / r['ruta'] / 'operaciones.csv'
@@ -251,7 +256,9 @@ def main():
     p.add_argument('--alfa', type=float, default=.05)
     p.add_argument('--potencia', type=float, default=.8)
     p = sub.add_parser('contraste')
-    p.add_argument('--corridas', nargs='+', required=True)
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument('--corridas', nargs='+', help='run_id de corridas integradas')
+    g.add_argument('--campana', help='Prefijo de una campaña integrada; usa sus corridas completas')
     p.add_argument('--tol-abs', type=float, default=.5)
     p.add_argument('--tol-rel', type=float, default=.05)
     sub.add_parser('verificar')

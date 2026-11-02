@@ -1,7 +1,7 @@
 """Ejecución completa del experimento del Mini AS/RS con un solo comando.
 
 python experimento.py                    fases sin conexión: A, E, B
-python experimento.py --conectado        además la fase D con CODESYS, FluidSIM y CoppeliaSim
+python experimento.py --conectado        además las fases D y C con CODESYS, FluidSIM y CoppeliaSim
 
 Fases
   A  pruebas del selector, del banco y del supervisor (unitarias)
@@ -9,6 +9,8 @@ Fases
   B  modelo rápido R vs C: piloto, tamaño de muestra con delta_min_s, campaña final y análisis pareado
   D  campaña conectada de 112 almacenamientos y 112 recuperaciones, por bloques del runtime, con
      reanudación automática tras desconexión de CODESYS
+  C  contraste integrado R vs C: parejas recuperar + almacenar con destino propuesto por Python
+     (estrategia 3 del PLC), análisis pareado y contraste modelo vs integrado; parte del rack que deja D
 
 El protocolo (delta, semillas, réplicas, ocupaciones) se lee de experimento.json y su hash queda en
 cada corrida. Todo se registra en datos_experimentos/; el resumen final queda en
@@ -33,7 +35,8 @@ from registro_experimental import Corrida  # noqa: E402
 SUITES_A = [('coordinador/estrategias', 'test_estrategias_colocacion'),
             ('banco_pruebas_112', 'test_banco'),
             ('banco_pruebas_112', 'test_sesiones_runtime'),
-            ('banco_pruebas_112', 'test_supervisor')]
+            ('banco_pruebas_112', 'test_supervisor'),
+            ('banco_pruebas_112', 'test_contraste')]
 SUITES_E = [('banco_pruebas_112', 'pruebas_fallas')]
 
 
@@ -117,15 +120,34 @@ class Ejecucion:
         return dict(piloto=piloto, parejas_requeridas=requeridas, replicas_final=replicas,
                     campana_final=final, analisis=carpeta_pareado, potencia=str(carpeta_potencia))
 
-    def fase_d(self):
+    def supervisor(self, *extra):
         c = self.p['conectado']
         cmd = [sys.executable, str(RAIZ / 'banco_pruebas_112' / 'supervisor_campana.py'), '--confirmar-movimientos',
-               '--estrategia', str(c['estrategia']), '--limite-runtime-min', str(c['limite_runtime_min']),
-               '--margen-runtime-min', str(c['margen_runtime_min']), '--bloque-min', str(c['bloque_min']),
-               '--espera-max-min', str(c['espera_max_min']), '--licencia', c['licencia'], '--datos', str(self.datos)]
+               '--limite-runtime-min', str(c['limite_runtime_min']), '--margen-runtime-min', str(c['margen_runtime_min']),
+               '--espera-max-min', str(c['espera_max_min']), '--licencia', c['licencia'], '--datos', str(self.datos),
+               *extra]
+        return subprocess.run(cmd, cwd=RAIZ).returncode
+
+    def fase_c(self):
+        campana = self.args.campana_contraste or f'{self.id}_rcC'
+        codigo = self.supervisor('--modo', 'contraste', '--campana', campana, '--protocolo', str(self.args.protocolo))
+        resultado = dict(ok=codigo == 0, codigo=codigo, campana=campana)
+        if codigo == 0:
+            c = self.p['contraste']
+            resultado.update(pareado=self.analizar('pareado', '--campana', campana),
+                             contraste_modelo=self.analizar('contraste', '--campana', campana,
+                                                            '--tol-abs', str(c['tolerancia_abs_s']),
+                                                            '--tol-rel', str(c['tolerancia_rel'])))
+        else:
+            resultado['reanudar'] = f'python experimento.py --fases C --campana-contraste {campana}'
+        return resultado
+
+    def fase_d(self):
+        c = self.p['conectado']
+        extra = ['--estrategia', str(c['estrategia']), '--bloque-min', str(c['bloque_min'])]
         if self.args.reanudar:
-            cmd += ['--reanudar', str(self.args.reanudar)]
-        codigo = subprocess.run(cmd, cwd=RAIZ).returncode
+            extra += ['--reanudar', str(self.args.reanudar)]
+        codigo = self.supervisor(*extra)
         return dict(ok=codigo == 0, codigo=codigo)
 
 
@@ -140,17 +162,18 @@ def iterar(suite):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--protocolo', type=Path, default=RAIZ / 'experimento.json')
-    ap.add_argument('--fases', default=None, help='Lista separada por comas; por defecto A,E,B y D si --conectado')
-    ap.add_argument('--conectado', action='store_true', help='Incluye la fase D con el sistema integrado')
+    ap.add_argument('--fases', default=None, help='Lista separada por comas; por defecto A,E,B y D,C si --conectado')
+    ap.add_argument('--conectado', action='store_true', help='Incluye las fases C y D con el sistema integrado')
+    ap.add_argument('--campana-contraste', help='Campaña de contraste a continuar en la fase C')
     ap.add_argument('--reanudar', type=Path, help='Punto de continuación para retomar la fase D')
     ap.add_argument('--datos', type=Path, default=RAIZ / 'datos_experimentos')
     args = ap.parse_args()
     texto = args.protocolo.read_text(encoding='utf-8')
     protocolo = json.loads(texto)
-    fases = (args.fases.split(',') if args.fases else ['A', 'E', 'B'] + (['D'] if args.conectado else []))
+    fases = (args.fases.split(',') if args.fases else ['A', 'E', 'B'] + (['D', 'C'] if args.conectado else []))
     e = Ejecucion(args, protocolo, texto)
     print('Ejecución:', e.carpeta, flush=True)
-    funciones = dict(A=lambda: e.suites('A', SUITES_A), E=lambda: e.suites('E', SUITES_E), B=e.fase_b, D=e.fase_d)
+    funciones = dict(A=lambda: e.suites('A', SUITES_A), E=lambda: e.suites('E', SUITES_E), B=e.fase_b, C=e.fase_c, D=e.fase_d)
     for f in fases:
         estado = e.fase(f, funciones[f])
         if f == 'A' and estado != 'completa':

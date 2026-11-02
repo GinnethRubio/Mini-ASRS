@@ -8,6 +8,10 @@ Ejecuta banco_112.py campana por bloques y, entre bloques:
 
 python banco_pruebas_112/supervisor_campana.py --estrategia 2 --confirmar-movimientos
 python banco_pruebas_112/supervisor_campana.py --estrategia 2 --confirmar-movimientos --reanudar RUTA/continuar_campana.json
+python banco_pruebas_112/supervisor_campana.py --modo contraste --confirmar-movimientos [--campana ID]
+
+En modo contraste ejecuta contraste_rc.py con el mismo esquema de bloques y reconexión; el progreso
+queda en logs_112/estado_contraste_<campaña>.json y la corrida interrumpida se repite completa.
 
 Logs: logs_112/<fecha>_supervisor/ (supervisor.jsonl, estado.json, main_*.log y bloques/) y la
 corrida de nivel D en datos_experimentos/ con todas las operaciones, interrupciones y fallos.
@@ -68,6 +72,7 @@ class Supervisor:
         self.bloque = 0
         self.punto = Path(args.reanudar) if args.reanudar else None
         self.continuar = args.continuar
+        self.cobertura = getattr(args, 'modo', 'cobertura') == 'cobertura'
         self.estado = {}
         self.log = (self.carpeta / 'supervisor.jsonl').open('a', encoding='utf-8', buffering=1)
 
@@ -173,7 +178,7 @@ class Supervisor:
             self.emitir('bloque_inicio', inicio_runtime=inicio, punto=self.punto)
             codigo, carpeta = self.ejecutar_bloque(self.bloque, self.punto, self.continuar and self.bloque == 1, inicio)
             self.emitir('bloque_fin', codigo=codigo, carpeta=carpeta)
-            if self.corrida is not None and carpeta:
+            if self.corrida is not None and carpeta and self.cobertura:
                 from puente_banco import importar_bloque
                 importar_bloque(self.corrida, carpeta, self.bloque, self.corrida.t0)
             if codigo == 0:
@@ -193,7 +198,8 @@ class Supervisor:
             self.avisar()
             interrupcion = ('perdida_comunicacion', ahora_utc(), 'Ciclo en curso no contabilizado; inventario tomado de la escena')
             estado = Path(carpeta) / 'estado_interrumpido.json' if carpeta else None
-            if estado is not None and estado.exists():
+            # El contraste reanuda desde su propio estado y repite completa la corrida interrumpida.
+            if estado is not None and estado.exists() and self.cobertura:
                 pendiente = estado
             self.coordinador.descartar()
 
@@ -261,20 +267,40 @@ def bloque_banco(args, carpeta):
             cmd += ['--reanudar', str(punto)]
         elif continuar:
             cmd.append('--continuar')
-        proceso = subprocess.Popen(cmd, cwd=RAIZ, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                   text=True, encoding='utf-8', errors='replace')
-        carpeta_bloque = None
-        for linea in proceso.stdout:
-            print(f'  [bloque {numero}] {linea.rstrip()}', flush=True)
-            if linea.startswith('Logs:'):
-                carpeta_bloque = linea.split('Logs:', 1)[1].strip()
-        return proceso.wait(), carpeta_bloque
+        return lanzar_bloque(cmd, numero)
     return ejecutar
+
+
+def bloque_contraste(args, carpeta):
+    """Bloques del contraste R vs C; todos comparten la campaña y el archivo de estado."""
+    def ejecutar(numero, punto, continuar, inicio):
+        cmd = [sys.executable, str(AQUI / 'contraste_rc.py'), '--confirmar-movimientos', '--campana', args.campana,
+               '--estado', str(args.estado_contraste), '--protocolo', str(args.protocolo),
+               '--salida', str(Path(carpeta) / 'bloques'), '--datos', str(args.datos), '--opc-url', args.opc_url,
+               '--inicio-runtime', inicio, '--limite-runtime-min', str(args.limite_runtime_min),
+               '--margen-runtime-min', str(args.margen_runtime_min)]
+        return lanzar_bloque(cmd, numero)
+    return ejecutar
+
+
+def lanzar_bloque(cmd, numero):
+    proceso = subprocess.Popen(cmd, cwd=RAIZ, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               text=True, encoding='utf-8', errors='replace')
+    carpeta_bloque = None
+    for linea in proceso.stdout:
+        print(f'  [bloque {numero}] {linea.rstrip()}', flush=True)
+        if linea.startswith('Logs:'):
+            carpeta_bloque = linea.split('Logs:', 1)[1].strip()
+    return proceso.wait(), carpeta_bloque
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--modo', choices=['cobertura', 'contraste'], default='cobertura',
+                    help='cobertura: 112 almacenamientos y 112 recuperaciones (nivel D); contraste: parejas R vs C (nivel C)')
     ap.add_argument('--estrategia', type=int, choices=[0, 1, 2], default=2)
+    ap.add_argument('--campana', help='Contraste: identificador de la campaña a crear o continuar')
+    ap.add_argument('--protocolo', type=Path, default=RAIZ / 'experimento.json')
     ap.add_argument('--confirmar-movimientos', action='store_true')
     ap.add_argument('--continuar', action='store_true')
     ap.add_argument('--reanudar', type=Path)
@@ -305,13 +331,26 @@ def main():
         except (ImportError, RuntimeError):
             return None
     from registro_experimental import Corrida
-    run_id = carpeta.name.replace('_supervisor', f'_D_E{args.estrategia}')
-    corrida = Corrida(args.datos, 'D', run_id, politica=f'E{args.estrategia}', licencia=args.licencia,
-                      configuracion={k: str(v) for k, v in vars(args).items()},
-                      escenario=dict(campana='llenado de 112 sobres y 112 recuperaciones', logs=str(carpeta)),
-                      alcance='Campaña conectada CODESYS-FluidSIM-CoppeliaSim; tiempos reportados por el PLC.')
+    if args.modo == 'contraste':
+        args.campana = args.campana or carpeta.name.replace('_supervisor', '_rcC')
+        args.estado_contraste = args.salida / f'estado_contraste_{args.campana}.json'
+        # El prefijo sup_ deja esta corrida fuera del pareo de la campaña.
+        corrida = Corrida(args.datos, 'C', f'sup_{args.campana}_{carpeta.name}', licencia=args.licencia,
+                          configuracion={k: str(v) for k, v in vars(args).items()},
+                          escenario=dict(campana=args.campana, logs=str(carpeta)),
+                          alcance='Supervisión del contraste integrado: bloques, pausas y reconexiones.')
+        ejecutar_bloque = bloque_contraste(args, carpeta)
+    else:
+        run_id = carpeta.name.replace('_supervisor', f'_D_E{args.estrategia}')
+        corrida = Corrida(args.datos, 'D', run_id, politica=f'E{args.estrategia}', licencia=args.licencia,
+                          configuracion={k: str(v) for k, v in vars(args).items()},
+                          escenario=dict(campana='llenado de 112 sobres y 112 recuperaciones', logs=str(carpeta)),
+                          alcance='Campaña conectada CODESYS-FluidSIM-CoppeliaSim; tiempos reportados por el PLC.')
+        ejecutar_bloque = bloque_banco(args, carpeta)
     print('Supervisor:', carpeta.resolve(), '| corrida:', corrida.path, flush=True)
-    sup = Supervisor(args, carpeta, corrida, leer, inicio_runtime, bloque_banco(args, carpeta),
+    if args.modo == 'contraste':
+        print('Campaña de contraste:', args.campana, flush=True)
+    sup = Supervisor(args, carpeta, corrida, leer, inicio_runtime, ejecutar_bloque,
                      Coordinador(carpeta, leer, lanzar=not args.sin_lanzar_main))
     estado = 'error'
     try:
