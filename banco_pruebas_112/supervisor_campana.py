@@ -142,8 +142,14 @@ class Supervisor:
         """PLC accesible, coordinador listo, FluidSIM con permisos y actuadores en reposo."""
         d = self.esperar(self.leer, 'conexión OPC UA con CODESYS', self.args.espera_max_min * 60)
         self.coordinador.asegurar(relanzar=not d['GVL.Maquina_Lista'])
-        return self.esperar(lambda: (lambda x: x if x is not None and listo_para_reanudar(x) else None)(self.leer()),
-                            'PLC en espera, main.py listo, FluidSIM con permisos y actuadores en reposo',
+        def listo():
+            # main.py se cierra si la escena se reinicia; se relanza mientras se espera.
+            vigilar = getattr(self.coordinador, 'vigilar', None)
+            if vigilar is not None:
+                vigilar()
+            x = self.leer()
+            return x if x is not None and listo_para_reanudar(x) else None
+        return self.esperar(listo, 'PLC en espera, main.py listo, FluidSIM con permisos y actuadores en reposo',
                             self.args.espera_max_min * 60)
 
     def hubo_corte(self, inicio_bloque, carpeta):
@@ -235,6 +241,13 @@ class Coordinador:
                 self.proceso.terminate()
                 self.proceso.wait(10)
         self.proceso = None
+
+    def vigilar(self):
+        """Relanza main.py si el proceso que inició el supervisor terminó."""
+        if self.proceso is not None and self.proceso.poll() is not None:
+            print(f'main.py terminó con código {self.proceso.returncode}; se relanza.', flush=True)
+            self.proceso = None
+            self.asegurar(relanzar=False)
 
     def asegurar(self, relanzar):
         if self.proceso is not None and self.proceso.poll() is None:

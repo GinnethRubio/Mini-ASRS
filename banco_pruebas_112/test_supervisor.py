@@ -147,6 +147,38 @@ class Pruebas(unittest.TestCase):
         self.assertEqual(sup.ejecutar(), 1)
         sup.cerrar()
 
+    def test_relanza_main_si_termina_durante_la_espera(self):
+        lanzados = []
+
+        class Proceso:
+            def __init__(self, vivo):
+                self.vivo, self.returncode = vivo, 1
+
+            def poll(self):
+                return None if self.vivo else 1
+        listo = {'v': False}
+
+        def leer():
+            d = reposo(0)
+            d['GVL.Maquina_Lista'] = listo['v']
+            return d
+        coord = sv.Coordinador(self.tmp.name, leer, lanzar=True, gracia_s=0, dormir=lambda s: None)
+        coord.proceso = Proceso(False)
+        original = sv.subprocess.Popen
+
+        def popen(*a, **k):
+            lanzados.append(a[0])
+            listo['v'] = True
+            return Proceso(True)
+        sv.subprocess.Popen = popen
+        try:
+            coord.vigilar()
+            coord.vigilar()
+        finally:
+            sv.subprocess.Popen = original
+        self.assertEqual(len(lanzados), 1)
+        self.assertTrue(lanzados[0][-1].endswith('main.py'))
+
     def test_clasifica_cortes(self):
         self.assertTrue(sv.es_corte_comunicacion('ConnectionResetError(10054)'))
         self.assertTrue(sv.es_corte_comunicacion("RuntimeError('Contador de operaciones reiniciado')"))
