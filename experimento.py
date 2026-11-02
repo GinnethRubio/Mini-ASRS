@@ -180,7 +180,24 @@ def iterar(suite):
             yield t
 
 
+def desactivar_seleccion_consola():
+    """En Windows, un clic en la consola activa el modo selección y congela la salida (y el proceso)
+    hasta pulsar Esc; se desactiva para que una campaña larga no quede detenida por un clic."""
+    if sys.platform != 'win32':
+        return
+    try:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        entrada = k32.GetStdHandle(-10)
+        modo = ctypes.c_uint32()
+        if k32.GetConsoleMode(entrada, ctypes.byref(modo)):
+            k32.SetConsoleMode(entrada, (modo.value & ~0x0040) | 0x0080)
+    except Exception:
+        pass
+
+
 def main():
+    desactivar_seleccion_consola()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--protocolo', type=Path, default=RAIZ / 'experimento.json')
     ap.add_argument('--fases', default=None, help='Lista separada por comas; por defecto A,E,B y D,C si --conectado')
