@@ -73,6 +73,7 @@ class Supervisor:
         self.punto = Path(args.reanudar) if args.reanudar else None
         self.continuar = args.continuar
         self.cobertura = getattr(args, 'modo', 'cobertura') == 'cobertura'
+        self.agotado = None
         self.estado = {}
         self.log = (self.carpeta / 'supervisor.jsonl').open('a', encoding='utf-8', buffering=1)
 
@@ -112,13 +113,15 @@ class Supervisor:
         except ValueError:
             return False
 
-    def esperar_reinicio_runtime(self, inicio_previo):
-        """Sigue si el runtime aún tiene tiempo; si no, espera a que CODESYS caiga y vuelva a arrancar."""
+    def esperar_reinicio_runtime(self, inicio_previo, forzar=False):
+        """Sigue si el runtime aún tiene tiempo; si no, espera a que CODESYS caiga y vuelva a arrancar.
+
+        Con forzar, el arranque anterior no sirve aunque le quede margen: el bloque ya dijo que no alcanza."""
         estado = {'caida': False}
 
         def listo():
             inicio = self.inicio_runtime()
-            if inicio and self.margen_suficiente(inicio):
+            if inicio and self.margen_suficiente(inicio) and not (forzar and inicio == inicio_previo):
                 return inicio
             if self.leer() is None:
                 estado['caida'] = True
@@ -126,7 +129,7 @@ class Supervisor:
                 # Sin hora de proceso utilizable, el plazo nuevo se cuenta desde la reconexión observada.
                 return inicio if inicio and self.margen_suficiente(inicio) else ahora_utc()
             return None
-        if not (inicio_previo and self.margen_suficiente(inicio_previo)):
+        if forzar or not (inicio_previo and self.margen_suficiente(inicio_previo)):
             self.emitir('runtime_sin_margen', accion='Reiniciar el runtime CODESYS; la campaña continúa sola al volver')
             self.avisar()
         return self.esperar(listo, 'reinicio del runtime CODESYS', self.args.espera_max_min * 60)
@@ -172,7 +175,9 @@ class Supervisor:
                 pendiente, self.punto = self.punto, None
         while True:
             inicio = self.inicio_runtime()
-            if not (inicio and self.margen_suficiente(inicio)):
+            if inicio and inicio == self.agotado:
+                inicio = self.esperar_reinicio_runtime(inicio, forzar=True)
+            elif not (inicio and self.margen_suficiente(inicio)):
                 inicio = self.esperar_reinicio_runtime(inicio)
             d = self.preparar()
             if pendiente is not None:
@@ -196,6 +201,9 @@ class Supervisor:
                 self.emitir('campana_completa', bloques=self.bloque)
                 return 0
             if codigo == 3:
+                if not self.cobertura:
+                    # El contraste cierra el bloque solo si la corrida siguiente no cabe en este arranque.
+                    self.agotado = inicio
                 self.punto = Path(carpeta) / 'continuar_campana.json'
                 motivo = json.loads(self.punto.read_text(encoding='utf-8')).get('motivo', 'pausa_runtime')
                 interrupcion = (motivo, ahora_utc(), 'Bloque cerrado en reposo; continuación ' + str(self.punto))

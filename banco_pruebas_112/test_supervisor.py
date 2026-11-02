@@ -200,6 +200,35 @@ class Pruebas(unittest.TestCase):
         self.assertEqual(punto['fase'], 'siguiente')
         self.assertEqual(sum(punto['ocupadas']), 30)
 
+    def test_contraste_sin_tiempo_espera_reinicio_aunque_quede_margen(self):
+        e = self.e
+        self.args.modo = 'contraste'
+
+        def ejecutar(n, punto, continuar, inicio):
+            e.bloques.append(inicio)
+            c = e.carpeta(n)
+            if n == 1:
+                (c / 'continuar_campana.json').write_text(json.dumps({'motivo': 'pausa_runtime'}), encoding='utf-8')
+                e.caido_hasta = e.t + 120
+                return 3, str(c)
+            return 0, str(c)
+        nuevo = {'listo': False}
+        leer = e.leer
+
+        def leer_con_reinicio():
+            d = leer()
+            if d is not None and e.caido_hasta is not None and not nuevo['listo'] and e.t >= e.caido_hasta:
+                e.inicio = datetime.now(timezone.utc)
+                nuevo['listo'] = True
+            return d
+        e.leer = leer_con_reinicio
+        sup = sv.Supervisor(self.args, self.tmp.name, None, e.leer, e.inicio_runtime, ejecutar,
+                            e.coordinador, dormir=e.dormir, reloj=e.reloj)
+        self.assertEqual(sup.ejecutar(), 0)
+        sup.cerrar()
+        self.assertEqual(len(e.bloques), 2)
+        self.assertNotEqual(e.bloques[0], e.bloques[1])
+
     def test_clasifica_cortes(self):
         self.assertTrue(sv.es_corte_comunicacion('ConnectionResetError(10054)'))
         self.assertTrue(sv.es_corte_comunicacion("RuntimeError('Contador de operaciones reiniciado')"))
