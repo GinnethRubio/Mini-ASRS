@@ -36,7 +36,7 @@ flowchart LR
 
 ```
 
-La banda de salida está implementada en `control_banda_salida.py` y es utilizada por el módulo de recuperación.
+La banda de salida está implementada en `coordinador/movimiento/control_banda_salida.py` y es utilizada por el módulo de recuperación.
 ### Circuito neumático e integración
 
 El circuito de FluidSIM representa el eje Y y la pinza neumática. El suministro comprende compresor 0P1, unidad de mantenimiento indicada a 6 bar y presostato 0B1 indicado a 4 bar. El cilindro de doble efecto 1A1 mueve Y mediante válvula 5/2 biestable, reguladores de caudal y finales de carrera 1B1/1B2. El actuador de simple efecto 1A2 acciona la pinza por válvula 3/2 biestable, con regulación de caudal y sensores 2B1/2B2. S1/S4/S2/S3 gestionan marcha, recuperación, paro y rearme; S0/K0 informa el estado de emergencia. H1–H4 señalan marcha, movimiento, recuperación y alarma.
@@ -72,24 +72,39 @@ Versiones identificadas en el laboratorio: CODESYS V3.5 SP9 Patch 1+ y FluidSIM 
 La descripción ampliada de funciones, flujo de datos, heartbeat y campañas está en [funcionamiento y arquitectura](docs/funcionamiento_y_arquitectura.md).
 ## Estructura
 
-| Ruta | Contenido |
-|---|---|
-| `main.py` | Coordinador PLC ↔ CoppeliaSim |
-| `config.py` | Dirección OPC UA, símbolos, perfiles de velocidad y aceleración, límites de supervisión |
-| `codesys_opcua.py` | Cliente OPC UA con descubrimiento de namespace y escritura tipada |
-| `coppelia_bridge.py` | Conexión con CoppeliaSim |
-| `control_portico.py`, `control_gripper.py` | Movimiento de ejes con perfil trapezoidal y control del sujetador |
-| `control_banda_integrado.py`, `control_banda_salida.py` | Banda de entrada (creación de sobres) y banda de salida |
-| `lector_qr.py` | Lectura de QR desde el sensor de visión |
-| `inventario.py`, `sincronizacion_escena.py` | Inventario JSON y reconstrucción de la ocupación desde la escena |
-| `recuperacion.py` | Extracción desde el rack y entrega en la segunda banda |
-| `evaluar_estrategias.py` | Comparación de estrategias de asignación con el modelo de tiempos |
-| `diagnostico.py` | Verificación de símbolos OPC UA, inventario y coordenadas |
-| `Coordenadas_Rack_Mini_ASRS.xlsx` | Coordenadas de las 112 celdas |
-| `inventario_plantilla.json` | Rack vacío; se copia como `inventario_mini_asrs.json` en la primera ejecución |
-| `QR_Mini_ASRS/` | Códigos QR AS-001 a AS-112 |
-| `banco_pruebas_112/` | Banco de pruebas de 112 posiciones: modelo, registro OPC UA y campaña conectada por bloques |
-| `experimentos/` | Campaña pareada de políticas R y C, registro experimental y análisis |
+```text
+Mini-ASRS/
+├── coordinador/                  Coordinador Python
+│   ├── main.py                   Coordinador PLC ↔ CoppeliaSim
+│   ├── config.py                 Dirección OPC UA, símbolos, perfiles v/a, límites de supervisión y rutas de datos
+│   ├── diagnostico.py            Verificación de símbolos OPC UA, inventario y coordenadas
+│   ├── rutas.py                  Rutas de importación de las carpetas del coordinador
+│   ├── comunicacion/
+│   │   ├── codesys_opcua.py      Cliente OPC UA con descubrimiento de namespace y escritura tipada
+│   │   └── coppelia_bridge.py    Conexión con CoppeliaSim
+│   ├── movimiento/
+│   │   ├── control_portico.py    Ejes X/Y/Z con perfil trapezoidal
+│   │   ├── control_gripper.py    Sujetador
+│   │   ├── control_banda_integrado.py   Banda de entrada y creación de sobres
+│   │   ├── control_banda_salida.py      Banda de salida
+│   │   └── recuperacion.py       Extracción del rack y entrega en la segunda banda
+│   ├── almacen/
+│   │   ├── inventario.py         Inventario JSON
+│   │   ├── sincronizacion_escena.py     Reconstrucción de la ocupación desde la escena
+│   │   └── lector_qr.py          Lectura de QR desde el sensor de visión
+│   └── estrategias/
+│       └── evaluar_estrategias.py       Comparación de estrategias con el modelo de tiempos
+├── datos/
+│   ├── Coordenadas_Rack_Mini_ASRS.xlsx  Coordenadas de las 112 celdas
+│   ├── inventario_plantilla.json        Rack vacío; se copia como inventario_mini_asrs.json en la primera ejecución
+│   ├── QR_Mini_ASRS/                    Códigos QR AS-001 a AS-112
+│   └── resultados_*.csv                 Salida de evaluar_estrategias.py
+├── banco_pruebas_112/            Banco de pruebas de 112 posiciones: modelo, registro OPC UA y campaña por bloques
+├── experimentos/                 Campaña pareada R/C, registro experimental y análisis
+└── docs/                         Arquitectura, mapa de E/S, alarmas y funcionamiento
+```
+
+El inventario de trabajo (`datos/inventario_mini_asrs.json`) y sus respaldos se generan al ejecutar y no se versionan.
 
 ## Instalación
 
@@ -106,8 +121,8 @@ En VS Code, las tareas de `.vscode/tasks.json` crean el entorno, ejecutan el dia
 
 1. Descargar el proyecto CODESYS al runtime y dejar el PLC en espera, detenido y sin órdenes.
 2. Abrir la escena en CoppeliaSim y FluidSIM con el enlace OPC DA activo.
-3. Ejecutar `python diagnostico.py` para comprobar símbolos, inventario y coordenadas.
-4. Ejecutar `python main.py`. El coordinador sincroniza el inventario con la escena y queda listo; la marcha se da desde la HMI.
+3. Ejecutar `python coordinador\\diagnostico.py` para comprobar símbolos, inventario y coordenadas.
+4. Ejecutar `python coordinador\\main.py`. El coordinador sincroniza el inventario con la escena y queda listo; la marcha se da desde la HMI.
 
 ## Banco de pruebas
 
@@ -122,7 +137,7 @@ python .\banco_pruebas_112\banco_112.py registrar --proyecto . --salida .\logs_1
 python .\banco_pruebas_112\banco_112.py campana --proyecto . --salida .\logs_112 --estrategia 0 --confirmar-movimientos --inicio-runtime auto
 ```
 
-La campaña conectada trabaja por bloques dentro del tiempo de funcionamiento del runtime CODESYS (`--limite-runtime-min`, 60 por defecto). Antes del límite envía un paro normal, espera el reposo confirmado del PLC y de los actuadores y guarda `continuar_campana.json`. `--reanudar` continúa la campaña desde ese punto. `temporizador_runtime.py` muestra el tiempo restante del runtime y avisa en los umbrales configurados.
+La campaña conectada trabaja por bloques dentro del tiempo de funcionamiento del runtime CODESYS (`--limite-runtime-min`, 60 por defecto). Antes del límite envía un paro normal, espera el reposo confirmado del PLC y de los actuadores y guarda `continuar_campana.json`. `--reanudar` continúa la campaña desde ese punto. `banco_pruebas_112/temporizador_runtime.py` muestra el tiempo restante del runtime y avisa en los umbrales configurados.
 
 Pruebas automatizadas:
 

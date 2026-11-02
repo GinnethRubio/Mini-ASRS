@@ -7,7 +7,12 @@ esa geometría y el mismo perfil trapezoidal de control_portico.
 import csv
 import random
 import statistics
-from config import (PROJECT_DIR, POLL_INTERVAL, VEL_MAX_X, VEL_MAX_Y, VEL_MAX_Z,
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import rutas  # noqa: E402,F401
+from config import (DATOS_DIR, POLL_INTERVAL, VEL_MAX_X, VEL_MAX_Y, VEL_MAX_Z,
                     ACEL_X, ACEL_Y, ACEL_Z)
 from control_portico import (ControlPortico, ARCHIVO_COORDENADAS, NUM_FILAS,
                              Y_EXTENDIDO, Y_RETRAIDO, duracion_perfil)
@@ -26,8 +31,8 @@ OCUPACION_INICIAL = 0.5
 SOBRES_ALEATORIO = 30
 SEMILLAS = range(1, 11)
 ESTRATEGIAS = {0: 'base', 1: 'optimizada'}
-CSV_OPERACIONES = PROJECT_DIR / 'resultados_operaciones.csv'
-CSV_RESUMEN = PROJECT_DIR / 'resultados_resumen.csv'
+CSV_OPERACIONES = DATOS_DIR / 'resultados_operaciones.csv'
+CSV_RESUMEN = DATOS_DIR / 'resultados_resumen.csv'
 
 
 def t_eje(distancia, eje):

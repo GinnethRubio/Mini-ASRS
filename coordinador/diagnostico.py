@@ -1,4 +1,5 @@
 """Comprobación de archivos y lectura OPC UA; no escribe órdenes ni mueve ejes."""
+import rutas  # noqa: F401
 from codesys_opcua import CodesysOPCUA
 from inventario import validar_inventario
 from control_portico import ControlPortico, ARCHIVO_COORDENADAS

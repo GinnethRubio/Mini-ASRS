@@ -16,13 +16,13 @@
         {
             "label": "2. Diagnostico (OPC UA, inventario, Excel)",
             "type": "shell",
-            "command": "Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; .\\.venv\\Scripts\\Activate.ps1; python diagnostico.py",
+            "command": "Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; .\\.venv\\Scripts\\Activate.ps1; python coordinador\\diagnostico.py",
             "problemMatcher": []
         },
         {
             "label": "3. Ejecutar main.py (coordinador)",
             "type": "shell",
-            "command": "Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; .\\.venv\\Scripts\\Activate.ps1; python main.py",
+            "command": "Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass; .\\.venv\\Scripts\\Activate.ps1; python coordinador\\main.py",
             "problemMatcher": []
         }
     ]

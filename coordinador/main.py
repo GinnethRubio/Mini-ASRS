@@ -5,6 +5,7 @@ No ejecutar simultáneamente los main independientes de los actuadores.
 """
 import math
 import time
+import rutas  # noqa: F401
 from config import POLL_INTERVAL
 from codesys_opcua import CodesysOPCUA
 from coppelia_bridge import CoppeliaBridge

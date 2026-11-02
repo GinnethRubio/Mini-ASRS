@@ -2,6 +2,7 @@
 import time
 from pathlib import Path
 import qrcode
+from config import DATOS_DIR
 from inventario import validar_inventario
 
 RUTA_BANDA = "/Prismatico_Banda_Entrada"
@@ -13,7 +14,7 @@ DURACION_TRANSPORTE = 4.0  # segundos; recorrido interpolado de la prueba funcio
 TOL_INICIO = 0.005
 TOL_FINAL = 0.002
 MARGEN_LIMITE = 0.001
-CARPETA_QR = Path(__file__).resolve().parent / "QR_Mini_ASRS"
+CARPETA_QR = DATOS_DIR / "QR_Mini_ASRS"
 
 class ControlBanda:
     def __init__(self, sim, plc):

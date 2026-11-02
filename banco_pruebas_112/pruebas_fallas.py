@@ -2,7 +2,8 @@ import sys
 import os
 from pathlib import Path
 PROYECTO = Path(os.environ.get('ASRS_TEST_PROJECT', Path(__file__).resolve().parent.parent)).resolve()
-sys.path.insert(0, str(PROYECTO))
+sys.path.insert(0, str(PROYECTO / 'coordinador'))
+import rutas  # noqa: E402,F401
 import json
 import tempfile
 import unittest
@@ -85,7 +86,7 @@ class Tests(unittest.TestCase):
         patch('control_portico.time.monotonic',lambda:self.now).start()
         c=main.CoordinadorMiniASRS.__new__(main.CoordinadorMiniASRS)
         c.plc=self.plc;c.sim=self.sim
-        c.portico=ControlPortico(self.sim,self.plc,PROYECTO/'Coordenadas_Rack_Mini_ASRS.xlsx')
+        c.portico=ControlPortico(self.sim,self.plc,PROYECTO/'datos'/'Coordenadas_Rack_Mini_ASRS.xlsx')
         c.gripper=ControlGripper(self.sim,self.plc)
         c.qr_actual=c.celda_actual=None;c.abierto_en_deposito=False
         c.anteriores={n:False for n in main.ORDENES}

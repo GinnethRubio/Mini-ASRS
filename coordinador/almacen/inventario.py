@@ -3,13 +3,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from config import JSON_PATH, NUM_CELDAS
+from config import DATOS_DIR, JSON_PATH, NUM_CELDAS
 
 
 def cargar_inventario(path=JSON_PATH):
     path = Path(path)
     if not path.is_file():
-        plantilla = Path(__file__).resolve().parent / "inventario_plantilla.json"
+        plantilla = DATOS_DIR / "inventario_plantilla.json"
         if path.resolve() != Path(JSON_PATH).resolve() or not plantilla.is_file():
             raise FileNotFoundError(f"No existe el inventario: {path}")
         # Primera ejecución: rack vacío; main.py lo sincroniza luego con la escena.

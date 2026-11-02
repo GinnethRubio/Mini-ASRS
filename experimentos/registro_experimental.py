@@ -93,7 +93,8 @@ def huella_codigo(raiz=PROYECTO):
 
 
 def perfil_cinematico():
-    sys.path.insert(0, str(PROYECTO))
+    sys.path.insert(0, str(PROYECTO / 'coordinador'))
+    import rutas  # noqa: F401
     import config
     return dict(v_max_m_s=dict(x=config.VEL_MAX_X, y=config.VEL_MAX_Y, z=config.VEL_MAX_Z),
                 a_max_m_s2=dict(x=config.ACEL_X, y=config.ACEL_Y, z=config.ACEL_Z),
@@ -120,7 +121,7 @@ class Corrida:
         self.t0 = time.monotonic()
         self.cuentas = dict(operaciones=0, operaciones_medidas=0, fallos=0, interrupciones=0)
         self.base = dict(run_id=run_id, nivel=nivel, politica=politica, ocupacion=ocupacion, replica=replica)
-        geometria = PROYECTO / 'Coordenadas_Rack_Mini_ASRS.xlsx'
+        geometria = PROYECTO / 'datos' / 'Coordenadas_Rack_Mini_ASRS.xlsx'
         self.manifiesto = dict(
             run_id=run_id, nivel=NIVELES[nivel], estado='en_curso', inicio_utc=ahora_utc(),
             equipo=platform.node(), sistema=platform.platform(), codigo=version_git(),

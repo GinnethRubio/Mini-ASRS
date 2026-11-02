@@ -21,7 +21,8 @@ from pathlib import Path
 import numpy as np
 
 PROYECTO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROYECTO))
+sys.path.insert(0, str(PROYECTO / 'coordinador'))
+import rutas  # noqa: E402,F401
 
 from control_portico import ControlPortico, ARCHIVO_COORDENADAS, NUM_FILAS  # noqa: E402
 from evaluar_estrategias import (ciclo_almacenamiento, t_eje, T_SONDEO, T_CONFIRMACION,  # noqa: E402

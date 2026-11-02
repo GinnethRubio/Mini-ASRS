@@ -31,8 +31,10 @@ class Registro:
         self.f = (self.path/'eventos.jsonl').open('w', encoding='utf-8', buffering=1)
         self.modo = modo
         archivos = {}
-        for p in sorted(proyecto.iterdir()):
-            if p.is_file() and p.suffix in ('.py', '.xlsx', '.json'):
+        fuentes = sorted([*(proyecto/'coordinador').rglob('*.py'), *(proyecto/'datos').glob('*.xlsx'),
+                          *(proyecto/'datos').glob('*.json')])
+        for p in fuentes:
+            if '__pycache__' not in p.parts:
                 contenido = p.read_bytes()
                 archivos[p.name] = hashlib.sha256(contenido).hexdigest()
                 dest = self.path/'fuentes'/p.name
@@ -387,7 +389,7 @@ def registrar(args, log):
                     if ventana.reloj()>=ventana.parar_en:
                         raise RuntimeError('Se consumió la ventana durante la preparación; no se envía START')
                     from inventario import validar_inventario
-                    datos=validar_inventario(args.proyecto/'inventario_mini_asrs.json')
+                    datos=validar_inventario(args.proyecto/'datos'/'inventario_mini_asrs.json')
                     ordenadas=sorted(datos['celdas'],key=lambda c:int(c['indice']))
                     if ([bool(c['ocupada']) for c in ordenadas]!=get(d,'axOcupada') or
                         [str(c.get('qr') or '') for c in ordenadas]!=get(d,'asCodigo')):
@@ -467,11 +469,12 @@ def main():
     ap.add_argument('--reanudar',type=Path,help='continuar_campana.json de un bloque cerrado en reposo')
     args=ap.parse_args();args.proyecto=args.proyecto.resolve()
     if args.repeticiones<1 or args.intervalo<.05 or args.duracion<0:ap.error('Parámetros fuera de rango')
-    if not (args.proyecto/'main.py').is_file():ap.error('Proyecto inválido: falta main.py')
+    if not (args.proyecto/'coordinador'/'main.py').is_file():ap.error('Proyecto inválido: falta coordinador/main.py')
     if args.modo=='campana' and not args.confirmar_movimientos:ap.error('campana requiere --confirmar-movimientos: mueve la simulación')
     if args.modo=='campana' and not args.inicio_runtime:ap.error('campana requiere --inicio-runtime con la hora verificada del runtime CODESYS')
     if args.reanudar and args.continuar:ap.error('Usar --reanudar o --continuar, no ambos')
-    sys.path.insert(0,str(args.proyecto))
+    sys.path.insert(0,str(args.proyecto/'coordinador'))
+    import rutas  # noqa: F401
     log=Registro(args.salida,args.modo,args.proyecto,{k:str(v) for k,v in vars(args).items()})
     print('Logs:',log.path.resolve(),flush=True)
     try:

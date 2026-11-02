@@ -23,7 +23,7 @@ from pathlib import Path
 import math
 import time
 
-from config import (PROJECT_DIR, VEL_MAX_X, VEL_MAX_Y, VEL_MAX_Z, ACEL_X, ACEL_Y, ACEL_Z,
+from config import (DATOS_DIR, VEL_MAX_X, VEL_MAX_Y, VEL_MAX_Z, ACEL_X, ACEL_Y, ACEL_Z,
                     T_MOVIMIENTO_PLC, T_ACTUADOR_PLC, MARGEN_SUPERVISION)
 
 # Rutas confirmadas en los scripts de prueba del proyecto.
@@ -40,7 +40,7 @@ TOLERANCIA_XZ = 0.002
 TOLERANCIA_Y = 0.002
 
 # El Excel compartido por el usuario.
-ARCHIVO_COORDENADAS = PROJECT_DIR / "Coordenadas_Rack_Mini_ASRS.xlsx"
+ARCHIVO_COORDENADAS = DATOS_DIR / "Coordenadas_Rack_Mini_ASRS.xlsx"
 
 # Hoja de cálculo: columnas A:I = salida/depósito; K:S = entrada con sobre.
 FILA_INICIO_EXCEL = 4

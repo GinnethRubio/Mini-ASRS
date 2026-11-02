@@ -1,8 +1,9 @@
 """Contrato OPC UA de la HMI exportada de ginneth .project."""
 import os
 from pathlib import Path
-PROJECT_DIR = Path(__file__).resolve().parent
-JSON_PATH = PROJECT_DIR / 'inventario_mini_asrs.json'
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+DATOS_DIR = PROJECT_DIR / 'datos'
+JSON_PATH = DATOS_DIR / 'inventario_mini_asrs.json'
 OPC_URL = os.environ.get('ASRS_OPC_URL', 'opc.tcp://192.168.0.21:4840')
 OPC_TIMEOUT = 5
 POLL_INTERVAL = 0.2
