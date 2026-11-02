@@ -182,7 +182,7 @@ Con las corridas completas, `analizar_experimentos.py pareado --campana <id>` pr
 
 ### Calibración del modelo
 
-`analizar_experimentos.py calibrar --corridas <run_id_D>` ajusta, por tipo de operación, `t_integrado = a + b · t_modelo` con los tiempos de la campaña de cobertura y guarda `datos_experimentos/calibracion_modelo.json`. La campaña del modelo (`campana_rc.py --calibracion`) y el contraste (`contraste --calibracion`) usan ese archivo; el contraste de la fase C se calcula con y sin calibración, de modo que el modelo se ajusta con los datos de D y se valida con los de C. Con `--conectado`, la fase D vacía primero el rack, ejecuta la cobertura y calibra; la fase C deja el rack vacío al terminar.
+`analizar_experimentos.py calibrar --corridas <run_id_D>` ajusta, por tipo de operación, `t_integrado = a + b · t_modelo` con los tiempos de la campaña de cobertura y guarda `datos_experimentos/calibracion_modelo.json`. La campaña del modelo (`campana_rc.py --calibracion`) y el contraste (`contraste --calibracion`) usan ese archivo; el contraste de la fase C se calcula con y sin calibración, de modo que el modelo se ajusta con los datos de D y se valida con los de C. Con `"continuar_cobertura": true` la fase D parte del rack que deja la fase C: completa las celdas libres y recupera las 112, sin vaciar y volver a llenar; con `"vaciar_al_final": true` la fase C deja el rack vacío. La calibración puede combinar varias corridas de cobertura (`calibrar --corridas ID1 ID2`).
 
 ### Supervisor de la campaña conectada
 

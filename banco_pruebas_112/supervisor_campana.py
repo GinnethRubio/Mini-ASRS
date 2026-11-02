@@ -392,6 +392,10 @@ def main():
         ap.error('La campaña mueve la simulación: agregar --confirmar-movimientos')
     if args.reanudar and args.continuar:
         ap.error('Usar --reanudar o --continuar, no ambos')
+    if args.modo == 'cobertura' and not (args.reanudar or args.continuar) and args.protocolo.exists():
+        # La cobertura parte del rack que haya: completa las celdas libres y luego recupera las 112.
+        args.continuar = bool(json.loads(args.protocolo.read_text(encoding='utf-8'))
+                              .get('conectado', {}).get('continuar_cobertura', False))
     carpeta = args.salida / (datetime.now().strftime('%Y%m%d_%H%M%S') + '_supervisor')
     carpeta.mkdir(parents=True)
     leer = lambda: leer_plc(args.opc_url)  # noqa: E731

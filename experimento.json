@@ -2,7 +2,11 @@
   "delta_min_s": 1.0,
   "alfa": 0.05,
   "potencia": 0.8,
-  "ocupaciones": [28, 56, 84],
+  "ocupaciones": [
+    28,
+    56,
+    84
+  ],
   "costo_c": "tiempo",
   "calentamiento_factor_k": 3,
   "replicas_piloto": 10,
@@ -14,9 +18,10 @@
     "semilla": 20261103,
     "replicas": 2,
     "parejas": 10,
-    "t_operacion_estimado_s": 40,
+    "t_operacion_estimado_s": 35,
     "tolerancia_abs_s": 0.5,
-    "tolerancia_rel": 0.05
+    "tolerancia_rel": 0.05,
+    "vaciar_al_final": false
   },
   "conectado": {
     "estrategia": 2,
@@ -25,6 +30,7 @@
     "bloque_min": 45,
     "espera_max_min": 0,
     "reinicio_automatico": true,
-    "licencia": "CODESYS Control Win V3 y FluidSIM, licencias académicas del laboratorio"
+    "licencia": "CODESYS Control Win V3 y FluidSIM, licencias académicas del laboratorio",
+    "continuar_cobertura": true
   }
 }

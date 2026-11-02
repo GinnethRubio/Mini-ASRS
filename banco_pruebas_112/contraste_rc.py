@@ -333,7 +333,8 @@ def main():
     args.t_operacion_s = c.get('t_operacion_estimado_s', T_OPERACION_S)
     if 2 * c['parejas'] * args.t_operacion_s > (args.limite_runtime_min - args.margen_runtime_min) * 60:
         ap.error('Una corrida no cabe en una ventana del runtime: reducir parejas o ampliar el límite')
-    args.vaciar = args.vaciar or args.solo_vaciar
+    # Con vaciar_al_final = false el rack queda ocupado y la cobertura continúa desde ahí (sin vaciar y rellenar).
+    args.vaciar = (args.vaciar or args.solo_vaciar) and c.get('vaciar_al_final', True)
     plan = [] if args.solo_vaciar else plan_contraste(c['semilla'], p['ocupaciones'], c['replicas'], c['parejas'], p['costo_c'])
     carpeta = args.salida / (datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_contraste')
     carpeta.mkdir(parents=True)
