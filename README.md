@@ -2,6 +2,22 @@
 
 Coordinación en Python del sistema automatizado de almacenamiento y recuperación de sobres Mini AS/RS: rack de 4 columnas × 28 filas (112 posiciones), pórtico cartesiano con ejes X/Z eléctricos, eje Y y sujetador neumáticos, banda de entrada, banda de salida e identificación por código QR.
 
+El sistema se valida en co-simulación: el PLC en CODESYS decide la secuencia y la celda, FluidSIM modela el circuito electroneumático, CoppeliaSim representa la planta 3D y Python coordina todo el conjunto. El repositorio incluye además un experimento reproducible que compara la asignación aleatoria uniforme (R) con la de mínimo costo temporal (C), desde un modelo rápido de tiempos hasta el sistema integrado.
+
+## Contenido
+
+- [Video demostrativo](#video-demostrativo)
+- [Arquitectura](#arquitectura)
+- [Estrategias de asignación](#estrategias-de-asignación)
+- [Instalación](#instalación)
+- [Ejecución](#ejecución)
+- [Experimento](#experimento)
+- [Resultados](#resultados)
+- [Banco de pruebas](#banco-de-pruebas)
+- [Estructura del repositorio](#estructura-del-repositorio)
+- [Requerimientos y alcance de uso](#requerimientos-y-alcance-de-uso)
+- [Autores](#autores)
+
 ## Video demostrativo
 
 Haz clic en la captura para abrir el video en Google Drive.
@@ -49,63 +65,11 @@ FluidSIM entrega al PLC los finales de carrera del eje Y y de la pinza por `IN0`
 
 La descripción ampliada de funciones, flujo de datos, heartbeat y campañas, junto con las versiones de software utilizadas, está en [funcionamiento y arquitectura](docs/funcionamiento_y_arquitectura.md).
 
-## Estructura
+### Secuencia del PLC
 
-```text
-Mini-ASRS/
-├── coordinador/                  Coordinador Python
-│   ├── main.py                   Coordinador PLC ↔ CoppeliaSim
-│   ├── config.py                 Dirección OPC UA, símbolos, perfiles v/a, límites de supervisión y rutas de datos
-│   ├── diagnostico.py            Verificación de símbolos OPC UA, inventario y coordenadas
-│   ├── rutas.py                  Rutas de importación de las carpetas del coordinador
-│   ├── comunicacion/
-│   │   ├── codesys_opcua.py      Cliente OPC UA con descubrimiento de namespace y escritura tipada
-│   │   └── coppelia_bridge.py    Conexión con CoppeliaSim
-│   ├── movimiento/
-│   │   ├── control_portico.py    Ejes X/Y/Z con perfil trapezoidal
-│   │   ├── control_gripper.py    Sujetador
-│   │   ├── control_banda_integrado.py   Banda de entrada y creación de sobres
-│   │   ├── control_banda_salida.py      Banda de salida
-│   │   └── recuperacion.py       Extracción del rack y entrega en la segunda banda
-│   ├── almacen/
-│   │   ├── inventario.py         Inventario JSON
-│   │   ├── sincronizacion_escena.py     Reconstrucción de la ocupación desde la escena
-│   │   └── lector_qr.py          Lectura de QR desde el sensor de visión
-│   └── estrategias/
-│       ├── estrategias_colocacion.py    Estrategias 0, 1 y 2 y verificación del destino elegido por el PLC
-│       ├── evaluar_estrategias.py       Comparación de estrategias con el modelo de tiempos
-│       └── test_estrategias_colocacion.py
-├── datos/
-│   ├── Coordenadas_Rack_Mini_ASRS.xlsx  Coordenadas de las 112 celdas
-│   ├── inventario_plantilla.json        Rack vacío; se copia como inventario_mini_asrs.json en la primera ejecución
-│   ├── QR_Mini_ASRS/                    Códigos QR AS-001 a AS-112
-│   └── resultados_*.csv                 Salida de evaluar_estrategias.py
-├── banco_pruebas_112/            Banco de pruebas de 112 posiciones: modelo, registro OPC UA, campaña por bloques y contraste R vs C
-├── experimentos/                 Campaña pareada R/C, registro experimental y análisis
-└── docs/                         Arquitectura, mapa de E/S, alarmas y funcionamiento
-```
+El PLC avanza por pasos numerados y solo pasa al siguiente con la confirmación de sensores y posiciones. Almacenar y recuperar comparten la misma secuencia desde el paso 40; cualquier falla o tiempo excedido lleva a la alarma 999, que requiere rearme.
 
-El inventario de trabajo (`datos/inventario_mini_asrs.json`) y sus respaldos se generan al ejecutar y no se versionan.
-
-## Instalación
-
-Requiere Windows, Python 3.11 o superior, CODESYS Control Win V3, FluidSIM y CoppeliaSim con la escena del proyecto.
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-En VS Code, las tareas de `.vscode/tasks.json` crean el entorno, ejecutan el diagnóstico y lanzan el coordinador.
-
-El coordinador y el banco se conectan al runtime CODESYS del mismo equipo (`opc.tcp://localhost:4840`) y a CoppeliaSim en su puerto local por defecto, de modo que basta con clonar el repositorio y ejecutarlo en el equipo donde corren las tres aplicaciones. Las rutas de datos se resuelven desde la carpeta del repositorio. Solo si CODESYS está en otro equipo se define la variable de entorno `ASRS_OPC_URL` con su dirección.
-
-## Ejecución
-
-1. Descargar el proyecto CODESYS al runtime y dejar el PLC en espera, detenido y sin órdenes.
-2. Abrir la escena en CoppeliaSim y FluidSIM con el enlace OPC DA activo.
-3. Ejecutar `python coordinador\diagnostico.py` para comprobar símbolos, inventario y coordenadas.
-4. Ejecutar `python coordinador\main.py`. El coordinador sincroniza el inventario con la escena y queda listo; la marcha se da desde la HMI.
+<p align="center"><img src="docs/media/secuencia_plc.png" alt="Secuencia de pasos del PLC" width="360"></p>
 
 ## Estrategias de asignación
 
@@ -124,42 +88,39 @@ La estrategia 3 permite ejecutar en el sistema integrado políticas decididas fu
 
 `python coordinador\estrategias\evaluar_estrategias.py` regenera `datos/resultados_*.csv`. Con los perfiles actuales (0,25 m/s y 0,5 m/s² en X y Z), las estrategias 1 y 2 eligen las mismas celdas; la 2 se diferencia cuando X y Z tienen velocidades o aceleraciones distintas.
 
-## Banco de pruebas
+### Movimiento de los ejes
+
+Los ejes X y Z siguen un perfil trapezoidal (0,25 m/s y 0,5 m/s²). Si el recorrido es menor que v²/a = 0,125 m el eje no alcanza la velocidad máxima y el perfil es triangular. El coordinador usa las mismas fórmulas para mover la escena y para estimar el costo de cada celda.
+
+<p align="center"><img src="docs/media/perfiles_movimiento.png" alt="Perfiles trapezoidal y triangular" width="720"></p>
+
+Con la estrategia de menor tiempo, el rack se llena desde las celdas bajas de las columnas 1 y 2, junto a la recogida, hacia las filas altas de la columna 4.
+
+<p align="center"><img src="docs/media/orden_llenado_minimo_costo.png" alt="Orden de llenado con la estrategia de menor tiempo" width="330"></p>
+
+## Instalación
+
+Requiere Windows, Python 3.11 o superior, CODESYS Control Win V3, FluidSIM y CoppeliaSim con la escena del proyecto.
 
 ```powershell
-# Almacenar y recuperar las 112 celdas con las tres estrategias (672 operaciones) con dobles de prueba, sin mover la escena
-python .\banco_pruebas_112\banco_112.py modelo
-
-# Registro OPC UA de solo lectura de lo que se opere desde la HMI
-python .\banco_pruebas_112\banco_112.py registrar
-
-# Campaña conectada: llenado de 112 sobres y 112 recuperaciones, por bloques
-python .\banco_pruebas_112\banco_112.py campana --estrategia 2 --confirmar-movimientos --inicio-runtime auto
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-La campaña conectada trabaja por bloques dentro del tiempo de funcionamiento del runtime CODESYS (`--limite-runtime-min`, 60 por defecto). Antes del límite envía un paro normal, espera el reposo confirmado del PLC y de los actuadores y guarda `continuar_campana.json`. `--reanudar` continúa la campaña desde ese punto. `banco_pruebas_112/temporizador_runtime.py` muestra el tiempo restante del runtime y avisa en los umbrales configurados.
+En VS Code, las tareas de `.vscode/tasks.json` crean el entorno, ejecutan el diagnóstico y lanzan el coordinador.
 
-Pruebas automatizadas:
+El coordinador y el banco se conectan al runtime CODESYS del mismo equipo (`opc.tcp://localhost:4840`) y a CoppeliaSim en su puerto local por defecto, de modo que basta con clonar el repositorio y ejecutarlo en el equipo donde corren las tres aplicaciones. Las rutas de datos se resuelven desde la carpeta del repositorio. Solo si CODESYS está en otro equipo se define la variable de entorno `ASRS_OPC_URL` con su dirección.
 
-```powershell
-cd banco_pruebas_112
-python -m unittest test_banco test_sesiones_runtime test_supervisor test_contraste pruebas_fallas
-cd ..\coordinador\estrategias
-python -m unittest test_estrategias_colocacion
-```
+## Ejecución
 
-## Experimento automatizado
+1. Descargar el proyecto CODESYS al runtime y dejar el PLC en espera, detenido y sin órdenes.
+2. Abrir la escena en CoppeliaSim y FluidSIM con el enlace OPC DA activo.
+3. Ejecutar `.\.venv\Scripts\python.exe coordinador\diagnostico.py` para comprobar símbolos, inventario y coordenadas.
+4. Ejecutar `.\.venv\Scripts\python.exe coordinador\main.py`. El coordinador sincroniza el inventario con la escena y queda listo; la marcha se da desde la HMI.
 
-```powershell
-python experimento.py               # fases A, E y B, sin conexión
-python experimento.py --conectado   # además las fases D y C con CODESYS, FluidSIM y CoppeliaSim
-python experimento.py --conectado --fases C,D   # contraste y luego cobertura sobre el rack que deja el contraste
-python experimento.py --fases C --campana-contraste <id>   # continuar un contraste integrado
-```
+## Experimento
 
-Las fases conectadas deben ejecutarse desde una consola de administrador, para que el supervisor pueda reiniciar el servicio de CODESYS. El experimento desactiva el modo de selección de la consola de Windows, de modo que un clic sobre la ventana no detiene la campaña.
-
-El protocolo se fija en `experimento.json` antes de ejecutar (diferencia mínima relevante, semillas, réplicas, ocupaciones y parámetros del runtime) y su hash queda en cada corrida. Las fases se ejecutan en orden:
+El experimento completo se ejecuta con un solo comando. El protocolo se fija en `experimento.json` antes de ejecutar (diferencia mínima relevante, semillas, réplicas, ocupaciones y parámetros del runtime) y su hash queda en cada corrida. Las fases se ejecutan en orden:
 
 | Fase | Contenido |
 |---|---|
@@ -170,6 +131,27 @@ El protocolo se fija en `experimento.json` antes de ejecutar (diferencia mínima
 | C | Contraste integrado R vs C con destino propuesto, análisis pareado y contraste modelo vs integrado |
 
 El resumen de cada ejecución queda en `datos_experimentos/ejecuciones/<fecha>/resumen.json`. Las fases sin conexión tardan alrededor de un minuto. La duración de las fases C y D depende del número de ventanas del runtime que ocupan y de las reconexiones; con los parámetros de `experimento.json`, la C requiere varias ventanas de una hora y la D entre 1,5 y 2,5 horas.
+
+```powershell
+python experimento.py               # fases A, E y B, sin conexión
+python experimento.py --conectado   # además las fases D y C con CODESYS, FluidSIM y CoppeliaSim
+python experimento.py --conectado --fases C,D   # contraste y luego cobertura sobre el rack que deja el contraste
+python experimento.py --fases C --campana-contraste <id>   # continuar un contraste integrado
+```
+
+Las fases conectadas deben ejecutarse desde una consola de administrador, para que el supervisor pueda reiniciar el servicio de CODESYS. El experimento desactiva el modo de selección de la consola de Windows, de modo que un clic sobre la ventana no detiene la campaña.
+
+### Modelo rápido R vs C
+
+`experimentos/campana_rc.py` compara, en la fase B, la asignación aleatoria uniforme (R) con la de mínimo costo de ubicación (C) sobre el modelo rápido de tiempos. Usa ocupaciones K = 28, 56 y 84, calentamiento de 3K parejas recuperar + almacenar y 200 parejas medidas por corrida. Ambas políticas reciben el mismo inventario inicial y la misma secuencia de solicitudes por identificador; los flujos aleatorios de inventario, demanda y selección de R se separan con `numpy.random.SeedSequence`.
+
+```powershell
+python .\experimentos\campana_rc.py --replicas 10
+python .\experimentos\analizar_experimentos.py pareado --campana <id_campana>
+python .\experimentos\analizar_experimentos.py potencia --campana <id_piloto> --delta 1.0
+python .\experimentos\analizar_experimentos.py contraste --campana <id_integrada>
+python .\experimentos\analizar_experimentos.py verificar
+```
 
 ### Contraste integrado R vs C
 
@@ -201,18 +183,6 @@ Con las corridas completas, `analizar_experimentos.py pareado --campana <id>` pr
 
 Cada evento queda en `logs_112/<fecha>_supervisor/` (`supervisor.jsonl`, `estado.json` con el estado actual, `main_*.log` y la carpeta de cada bloque) y la campaña completa en una corrida de nivel D del registro experimental, con las operaciones de todos los bloques, las interrupciones con su causa y duración y los fallos.
 
-## Experimentos
-
-`experimentos/campana_rc.py` compara la asignación aleatoria uniforme (R) con la de mínimo costo de ubicación (C) sobre el modelo rápido de tiempos. Usa ocupaciones K = 28, 56 y 84, calentamiento de 3K parejas recuperar + almacenar y 200 parejas medidas por corrida. Ambas políticas reciben el mismo inventario inicial y la misma secuencia de solicitudes por identificador; los flujos aleatorios de inventario, demanda y selección de R se separan con `numpy.random.SeedSequence`.
-
-```powershell
-python .\experimentos\campana_rc.py --replicas 10
-python .\experimentos\analizar_experimentos.py pareado --campana <id_campana>
-python .\experimentos\analizar_experimentos.py potencia --campana <id_piloto> --delta 1.0
-python .\experimentos\analizar_experimentos.py contraste --campana <id_integrada>
-python .\experimentos\analizar_experimentos.py verificar
-```
-
 ### Registro experimental
 
 `experimentos/registro_experimental.py` guarda cada corrida en `datos_experimentos/<nivel>/<run_id>/`:
@@ -228,6 +198,114 @@ python .\experimentos\analizar_experimentos.py verificar
 Los niveles son A (pruebas del selector), B (modelo rápido), C (contraste integrado), D (cobertura funcional) y E (fallos y recuperación). Al cerrar una corrida se sellan los archivos con SHA-256, quedan de solo lectura y se agrega una fila a `datos_experimentos/registro_corridas.csv`. Los análisis se escriben en `datos_experimentos/analisis/` con el hash de cada archivo de entrada, de modo que tablas y gráficos se regeneran desde los datos originales.
 
 El análisis pareado toma la corrida como unidad experimental: calcula por ocupación el número de parejas, la media y dispersión por política, la diferencia d = T_R − T_C, su intervalo de confianza del 95 % (prueba t relacionada), la diferencia relativa y los fallos. Las corridas incompletas o sin pareja se reportan en `excluidas.csv`. El contraste compara, operación por operación, el tiempo del modelo con el tiempo integrado y reporta MAE, sesgo, máximo, percentil 95 y fracción dentro de la tolerancia max(0,5 s; 5 %).
+
+## Resultados
+
+Resultados de la campaña completa: 20 parejas por ocupación en el modelo rápido, 6 parejas R/C (240 operaciones) en el sistema integrado y cobertura de las 112 celdas.
+
+**Modelo rápido (fase B).** C reduce el tiempo de ciclo en todas las ocupaciones, sin fallos.
+
+| Ocupación | Media R (s) | Media C (s) | R − C (s) | IC 95 % (s) | Mejora | Operaciones/hora R → C |
+|---|---|---|---|---|---|---|
+| 28 (25 %) | 27,55 | 22,26 | 5,29 | 5,12 a 5,45 | 19,2 % | 131 → 162 |
+| 56 (50 %) | 27,58 | 24,02 | 3,57 | 3,41 a 3,73 | 12,9 % | 131 → 150 |
+| 84 (75 %) | 27,66 | 25,80 | 1,86 | 1,71 a 2,01 | 6,7 % | 130 → 140 |
+
+**Sistema integrado (fase C).** Prueba t pareada sobre las 6 parejas:
+
+| Operación | R − C medio (s) | IC 95 % (s) | p |
+|---|---|---|---|
+| Almacenar | 3,0 | 0,9 a 5,1 | 0,015 |
+| Recuperar | −1,6 | −4,4 a 1,2 | 0,21 |
+| Ciclo completo | 0,7 | −1,7 a 3,1 | 0,50 |
+
+C almacena más rápido en las 6 parejas y reduce la distancia media por operación entre 22 % y 37 %. En la recuperación no hay mejora: la estación de despacho está junto a la columna 4 y el criterio de C solo considera el trayecto desde la recogida, por lo que favorece la columna 1.
+
+<p align="center"><img src="docs/media/contraste_r_vs_c.png" alt="Contraste R vs C por pareja" width="860"></p>
+<p align="center"><img src="docs/media/diferencias_pareadas.png" alt="Diferencias pareadas R menos C" width="860"></p>
+
+**Cobertura (fase D).** Los 112 almacenamientos y las 112 recuperaciones se completaron sin fallas. El almacenamiento toma de 22,5 a 39,8 s según la celda (más rápido junto a la recogida) y la recuperación de 18,5 a 47,6 s (más rápida junto al despacho). La calibración `t_integrado = a + b · t_modelo` ajusta los datos de la cobertura con error medio menor a 3 s por operación; como la velocidad del entorno de co-simulación varía entre sesiones, se aplica a la sesión de la que provienen los datos.
+
+<p align="center">
+  <img src="docs/media/mapa_tiempos_almacenamiento.png" alt="Tiempo de almacenamiento medido por celda" width="330">
+  <img src="docs/media/mapa_tiempos_recuperacion.png" alt="Tiempo de recuperación medido por celda" width="330">
+</p>
+
+## Banco de pruebas
+
+```powershell
+# Almacenar y recuperar las 112 celdas con las tres estrategias (672 operaciones) con dobles de prueba, sin mover la escena
+python .\banco_pruebas_112\banco_112.py modelo
+
+# Registro OPC UA de solo lectura de lo que se opere desde la HMI
+python .\banco_pruebas_112\banco_112.py registrar
+
+# Campaña conectada: llenado de 112 sobres y 112 recuperaciones, por bloques
+python .\banco_pruebas_112\banco_112.py campana --estrategia 2 --confirmar-movimientos --inicio-runtime auto
+```
+
+La campaña conectada trabaja por bloques dentro del tiempo de funcionamiento del runtime CODESYS (`--limite-runtime-min`, 60 por defecto). Antes del límite envía un paro normal, espera el reposo confirmado del PLC y de los actuadores y guarda `continuar_campana.json`. `--reanudar` continúa la campaña desde ese punto. `banco_pruebas_112/temporizador_runtime.py` muestra el tiempo restante del runtime y avisa en los umbrales configurados.
+
+Pruebas automatizadas:
+
+```powershell
+cd banco_pruebas_112
+python -m unittest test_banco test_sesiones_runtime test_supervisor test_contraste pruebas_fallas
+cd ..\coordinador\estrategias
+python -m unittest test_estrategias_colocacion
+```
+
+## Estructura del repositorio
+
+```text
+Mini-ASRS/
+├── experimento.py                Ejecución completa del experimento por fases
+├── experimento.json              Protocolo: delta mínimo, semillas, réplicas, ocupaciones y parámetros del runtime
+├── coordinador/                  Coordinador Python
+│   ├── main.py                   Coordinador PLC ↔ CoppeliaSim
+│   ├── config.py                 Dirección OPC UA, símbolos, perfiles v/a, límites de supervisión y rutas de datos
+│   ├── diagnostico.py            Verificación de símbolos OPC UA, inventario y coordenadas
+│   ├── rutas.py                  Rutas de importación de las carpetas del coordinador
+│   ├── comunicacion/
+│   │   ├── codesys_opcua.py      Cliente OPC UA con descubrimiento de namespace y escritura tipada
+│   │   └── coppelia_bridge.py    Conexión con CoppeliaSim
+│   ├── movimiento/
+│   │   ├── control_portico.py    Ejes X/Y/Z con perfil trapezoidal
+│   │   ├── control_gripper.py    Sujetador
+│   │   ├── control_banda_integrado.py   Banda de entrada y creación de sobres
+│   │   ├── control_banda_salida.py      Banda de salida
+│   │   └── recuperacion.py       Extracción del rack y entrega en la segunda banda
+│   ├── almacen/
+│   │   ├── inventario.py         Inventario JSON
+│   │   ├── sincronizacion_escena.py     Reconstrucción de la ocupación desde la escena
+│   │   └── lector_qr.py          Lectura de QR desde el sensor de visión
+│   └── estrategias/
+│       ├── estrategias_colocacion.py    Estrategias 0, 1 y 2 y verificación del destino elegido por el PLC
+│       ├── evaluar_estrategias.py       Comparación de estrategias con el modelo de tiempos
+│       └── test_estrategias_colocacion.py
+├── banco_pruebas_112/
+│   ├── banco_112.py              Modelo de 112 posiciones, registro OPC UA y campaña conectada por bloques
+│   ├── contraste_rc.py           Contraste R vs C en el sistema integrado con destino propuesto
+│   ├── supervisor_campana.py     Bloques por ventana del runtime, reconexión y reanudación
+│   ├── sesiones_runtime.py       Límite y margen de cada ventana del runtime
+│   ├── temporizador_runtime.py   Tiempo restante del runtime con avisos
+│   ├── pruebas_fallas.py         Fallos y recuperación del controlador con dobles de prueba
+│   └── test_*.py                 Pruebas del banco, sesiones, supervisor y contraste
+├── experimentos/
+│   ├── campana_rc.py             Campaña pareada R vs C sobre el modelo rápido
+│   ├── analizar_experimentos.py  Análisis pareado, potencia, contraste modelo vs integrado y calibración
+│   ├── calibracion.py            Ajuste t_integrado = a + b · t_modelo por operación
+│   ├── registro_experimental.py  Corridas selladas con SHA-256 e índice de corridas
+│   └── puente_banco.py           Enlace entre el banco y el registro experimental
+├── datos/
+│   ├── Coordenadas_Rack_Mini_ASRS.xlsx  Coordenadas de las 112 celdas
+│   ├── inventario_plantilla.json        Rack vacío; se copia como inventario_mini_asrs.json en la primera ejecución
+│   ├── QR_Mini_ASRS/                    Códigos QR AS-001 a AS-112
+│   └── resultados_*.csv                 Salida de evaluar_estrategias.py
+└── docs/                         Arquitectura, mapa de E/S, alarmas y funcionamiento
+```
+
+El inventario de trabajo (`datos/inventario_mini_asrs.json`), sus respaldos, los registros de campaña (`logs_112/`) y los datos experimentales (`datos_experimentos/`) se generan al ejecutar.
 
 ## Requerimientos y alcance de uso
 
