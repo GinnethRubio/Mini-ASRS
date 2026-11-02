@@ -97,10 +97,22 @@ class Pruebas(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'Alarma'):self.c.avanzar(self.d)
         self.assertEqual(self.escritos,[])
 
-    def test_pierde_permisos_fluid_sin_escrituras(self):
+    def test_pierde_permisos_fluid_espera_sin_escrituras_y_se_recupera(self):
         for palabra in (0,4,8,16,12,24):
             self.d['GVL.IN1']=palabra
-            with self.assertRaisesRegex(RuntimeError,'permisos'):self.c.avanzar(self.d)
+            self.assertFalse(self.c.avanzar(self.d))
+        self.assertEqual(self.escritos,[])
+        self.now=200;self.assertFalse(self.c.avanzar(self.d))
+        self.d['GVL.IN1']=28;self.now=250
+        self.c.avanzar(self.d)
+        self.assertIn(('GVL.START',True),self.escritos)
+        self.assertIn('comunicacion_restablecida',[t for t,_ in self.log.eventos])
+
+    def test_pierde_permisos_fluid_mas_del_limite_cierra_bloque(self):
+        self.d['GVL.IN1']=0
+        self.assertFalse(self.c.avanzar(self.d))
+        self.now=301
+        with self.assertRaisesRegex(RuntimeError,'permisos'):self.c.avanzar(self.d)
         self.assertEqual(self.escritos,[])
 
     def test_sin_progreso_no_sigue(self):

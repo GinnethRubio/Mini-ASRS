@@ -140,10 +140,39 @@ Pruebas automatizadas:
 
 ```powershell
 cd banco_pruebas_112
-python -m unittest test_banco test_sesiones_runtime pruebas_fallas
+python -m unittest test_banco test_sesiones_runtime test_supervisor pruebas_fallas
 cd ..\coordinador\estrategias
 python -m unittest test_estrategias_colocacion
 ```
+
+## Experimento automatizado
+
+```powershell
+python experimento.py               # fases A, E y B, sin conexión
+python experimento.py --conectado   # además la fase D con CODESYS, FluidSIM y CoppeliaSim
+```
+
+El protocolo se fija en `experimento.json` antes de ejecutar (diferencia mínima relevante, semillas, réplicas, ocupaciones y parámetros del runtime) y su hash queda en cada corrida. Las fases se ejecutan en orden:
+
+| Fase | Contenido |
+|---|---|
+| A | Pruebas del selector, del banco y del supervisor; si alguna falla no se ejecutan campañas |
+| E | Fallos y recuperación del controlador con dobles de prueba |
+| B | Piloto R vs C, tamaño de muestra con `delta_min_s`, campaña final con semilla nueva y análisis pareado |
+| D | Llenado de 112 sobres y 112 recuperaciones en el sistema integrado, con el supervisor de campaña |
+
+El resumen de cada ejecución queda en `datos_experimentos/ejecuciones/<fecha>/resumen.json`.
+
+### Supervisor de la campaña conectada
+
+`banco_pruebas_112/supervisor_campana.py` ejecuta la campaña por bloques y la mantiene en marcha sin intervención:
+
+- Antes del límite del runtime CODESYS (`limite_runtime_min` menos el margen) envía paro normal, espera el reposo confirmado y guarda el punto de continuación. Si el runtime todavía tiene tiempo, sigue con el bloque siguiente; si no, espera a que CODESYS se reinicie y continúa.
+- Si FluidSIM pierde los permisos, el PLC congela el paso y el banco espera su regreso hasta `--espera-comunicacion-s` sin cerrar el bloque.
+- Si CODESYS se desconecta, reintenta la conexión con esperas crecientes de 5 a 30 s, relanza `main.py`, toma el inventario resincronizado con la escena y reanuda desde la fase en que iba. El ciclo interrumpido no se contabiliza.
+- Una alarma del proceso, un inventario incoherente o un sobre sujeto detienen la campaña sin rearmar.
+
+Cada evento queda en `logs_112/<fecha>_supervisor/` (`supervisor.jsonl`, `estado.json` con el estado actual, `main_*.log` y la carpeta de cada bloque) y la campaña completa en una corrida de nivel D del registro experimental, con las operaciones de todos los bloques, las interrupciones con su causa y duración y los fallos.
 
 ## Experimentos
 

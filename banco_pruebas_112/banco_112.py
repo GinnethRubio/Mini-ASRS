@@ -242,8 +242,10 @@ class Campana:
     No escribe confirmaciones, inventario, IN/OUT, heartbeat ni rearme.
     El PLC y main.py conservan la ejecución y las protecciones.
     """
-    def __init__(self, escribir, log, estrategia, reloj=time.monotonic, continuar=False):
+    def __init__(self, escribir, log, estrategia, reloj=time.monotonic, continuar=False, espera_comunicacion_s=300):
         self.escribir=escribir;self.log=log;self.estrategia=estrategia;self.reloj=reloj
+        # Con FluidSIM sin permisos el PLC congela el paso; se espera su regreso sin mandar órdenes.
+        self.espera_comunicacion_s=espera_comunicacion_s;self.pausa_desde=None
         self.fase='preparar';self.iniciada=False;self.cola=[];self.paro_enviado=False
         self.base_alm=0;self.base_rec=0;self.ultimo_progreso=reloj();self.firma=None
         self.esperar_hasta=0
@@ -256,10 +258,19 @@ class Campana:
         h=lambda n:d['GVL_HMI.'+n]
         firma=(d['GVL.Paso_Actual'],h('iOperaciones'),h('iAlmacenados'),h('iRecuperados'))
         if firma!=self.firma:self.firma=firma;self.ultimo_progreso=self.reloj()
-        if self.reloj()-self.ultimo_progreso>90:raise TimeoutError('90 s sin avance; revisar PLC, Python y FluidSIM')
         if d['GVL.Paso_Actual']==999 or d['GVL.Python_Error']:raise RuntimeError('Alarma: campaña detenida sin rearme automático')
         if not d['GVL.Comunicacion_OK'] or int(d['GVL.IN1']) & 28 != 28:
-            raise RuntimeError('Comunicación o permisos FluidSIM ausentes')
+            if self.pausa_desde is None:
+                self.pausa_desde=self.reloj()
+                self.log.emitir('pausa_comunicacion',comunicacion_ok=d['GVL.Comunicacion_OK'],in1=int(d['GVL.IN1']))
+            if self.reloj()-self.pausa_desde>self.espera_comunicacion_s:
+                raise RuntimeError(f'Comunicación o permisos FluidSIM ausentes por más de {self.espera_comunicacion_s:.0f} s')
+            self.ultimo_progreso=self.reloj()
+            return False
+        if self.pausa_desde is not None:
+            self.log.emitir('comunicacion_restablecida',duracion_s=round(self.reloj()-self.pausa_desde,3))
+            self.pausa_desde=None
+        if self.reloj()-self.ultimo_progreso>90:raise TimeoutError('90 s sin avance; revisar PLC, Python y FluidSIM')
         if h('xModoManual') or h('xModoPaso') or h('xSimularCoppelia'):
             raise RuntimeError('La campaña requiere automático continuo y CoppeliaSim real')
         if self.fase=='preparar':
@@ -343,14 +354,15 @@ def registrar(args, log):
         if n not in permitidos:raise RuntimeError('Escritura no permitida: '+n)
         nodo=plc.client.get_node(f'ns={ns};s=|var|CODESYS Control Win V3.Application.'+n)
         nodo.set_value(ua.Variant(v,nodo.get_data_type_as_variant_type()))
-    campana=Campana(escribir,log,args.estrategia,continuar=args.continuar) if args.modo=='campana' else None
+    campana=Campana(escribir,log,args.estrategia,continuar=args.continuar,
+                    espera_comunicacion_s=getattr(args,'espera_comunicacion_s',300)) if args.modo=='campana' else None
     if campana is not None:
         verificar_estrategia_plc(plc, ns, args.estrategia)
     punto_previo=json.loads(args.reanudar.read_text(encoding='utf-8')) if getattr(args,'reanudar',None) else None
     def get(d,n):return d['GVL_HMI.'+n]
     try:
         with (log.path/'operaciones_observadas.csv').open('w',newline='',encoding='utf-8-sig') as f:
-            campos=['fecha_utc','contador','operacion','codigo','columna','fila','estrategia',
+            campos=['fecha_utc','monotonic_s','contador','operacion','codigo','columna','fila','estrategia',
                     'tiempo_plc_s','distancia_plc_mm','verificacion_inventario']
             w=csv.DictWriter(f,fieldnames=campos);w.writeheader()
             while args.duracion==0 or time.monotonic()-inicio<args.duracion:
@@ -388,7 +400,7 @@ def registrar(args, log):
                         qr=activa['sCodigoActual'];ocupadas=get(d,'axOcupada');codigos=get(d,'asCodigo')
                         if len(ocupadas)!=112 or len(codigos)!=112:raise RuntimeError('Arrays HMI de tamaño incorrecto')
                         ok=(bool(ocupadas[idx]) and codigos[idx]==qr) if op=='almacenar' else (not ocupadas[idx] and not codigos[idx])
-                        row=dict(fecha_utc=fecha(),contador=n,operacion=op,codigo=qr,columna=col,fila=fila,
+                        row=dict(fecha_utc=fecha(),monotonic_s=round(time.monotonic(),3),contador=n,operacion=op,codigo=qr,columna=col,fila=fila,
                                  estrategia=activa['iEstrategia'],tiempo_plc_s=get(d,'rTiempoCicloUltimo_s'),
                                  distancia_plc_mm=get(d,'rDistanciaUltima_mm'),verificacion_inventario=bool(ok))
                         w.writerow(row);f.flush();ops.append(row);log.emitir('operacion_observada',**row)
@@ -491,6 +503,7 @@ def main():
     ap.add_argument('--limite-runtime-min',type=float,default=60,help='Tiempo de uso continuo del runtime CODESYS en minutos (máximo 120)')
     ap.add_argument('--margen-runtime-min',type=float,default=10,help='Margen antes de la hora límite; mínimo 2 min')
     ap.add_argument('--bloque-min',type=float,default=45,help='Duración máxima de un bloque, además del límite del runtime')
+    ap.add_argument('--espera-comunicacion-s',type=float,default=300,help='Pausa máxima esperando FluidSIM o la comunicación antes de cerrar el bloque')
     ap.add_argument('--reanudar',type=Path,help='continuar_campana.json de un bloque cerrado en reposo')
     args=ap.parse_args();args.proyecto=args.proyecto.resolve()
     if args.repeticiones<1 or args.intervalo<.05 or args.duracion<0:ap.error('Parámetros fuera de rango')

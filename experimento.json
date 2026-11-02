@@ -1,0 +1,21 @@
+{
+  "delta_min_s": 1.0,
+  "alfa": 0.05,
+  "potencia": 0.8,
+  "ocupaciones": [28, 56, 84],
+  "costo_c": "tiempo",
+  "calentamiento_factor_k": 3,
+  "replicas_piloto": 10,
+  "replicas_minimas": 20,
+  "replicas_maximas": 200,
+  "semilla_piloto": 20261101,
+  "semilla_final": 20261102,
+  "conectado": {
+    "estrategia": 2,
+    "limite_runtime_min": 60,
+    "margen_runtime_min": 10,
+    "bloque_min": 45,
+    "espera_max_min": 60,
+    "licencia": "CODESYS Control Win V3 y FluidSIM, licencias académicas del laboratorio"
+  }
+}
