@@ -211,6 +211,24 @@ class Pruebas(unittest.TestCase):
         hechas = sorted(r['run_id'] for r in self.indice() if r['run_id'].startswith('prueba_rcC'))
         self.assertEqual(hechas, ['prueba_rcC_K003_r01_C', 'prueba_rcC_K003_r02_C'])
 
+    def test_espera_que_se_desactive_el_modo_manual(self):
+        plc = PLCSimulado()
+        plc.d['GVL_HMI.xModoManual'] = True
+        leer = plc.leer
+        n = {'v': 0}
+
+        def leer_con_cambio():
+            n['v'] += 1
+            if n['v'] == 3:
+                plc.d['GVL_HMI.xModoManual'] = False
+            return leer()
+        ej = cr.Ejecutor(leer_con_cambio, plc.escribir, lambda *a, **k: None, reloj=self.reloj, dormir=lambda s: None, intervalo=0)
+        ej.preparar()
+        plc.d['GVL_HMI.xModoPaso'] = True
+        ej2 = cr.Ejecutor(plc.leer, plc.escribir, lambda *a, **k: None, reloj=self.reloj, dormir=lambda s: None, intervalo=0)
+        with self.assertRaisesRegex(RuntimeError, 'activos: xModoPaso'):
+            ej2.preparar()
+
     def test_vaciado_deja_el_rack_vacio(self):
         plc = PLCSimulado([3, 40, 90])
         self.args.vaciar = True

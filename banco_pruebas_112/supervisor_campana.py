@@ -154,7 +154,11 @@ class Supervisor:
     def preparar(self):
         """PLC accesible, coordinador listo, FluidSIM con permisos y actuadores en reposo."""
         d = self.esperar(self.leer, 'conexión OPC UA con CODESYS', self.args.espera_max_min * 60)
-        self.coordinador.asegurar(relanzar=not d['GVL.Maquina_Lista'])
+        forzar, self.relanzar_main = getattr(self, 'relanzar_main', False), False
+        if forzar:
+            self.coordinador.asegurar(relanzar=True, forzar=True)
+        else:
+            self.coordinador.asegurar(relanzar=not d['GVL.Maquina_Lista'])
         def listo():
             # main.py se cierra si la escena se reinicia; se relanza mientras se espera.
             vigilar = getattr(self.coordinador, 'vigilar', None)
@@ -231,6 +235,7 @@ class Supervisor:
             if estado is not None and estado.exists() and self.cobertura:
                 pendiente = estado
             self.coordinador.descartar()
+            self.relanzar_main = True
 
     def cerrar(self):
         self.log.close()
@@ -272,15 +277,16 @@ class Coordinador:
             self.proceso = None
             self.asegurar(relanzar=False)
 
-    def asegurar(self, relanzar):
+    def asegurar(self, relanzar, forzar=False):
         if self.proceso is not None and self.proceso.poll() is None:
             if not relanzar:
                 return
             self.descartar()
-        # Un main.py externo que ya se reconectó publica Maquina_Lista en pocos segundos.
+        # Un main.py externo que ya se reconectó publica Maquina_Lista en pocos segundos. Tras descartar
+        # el coordinador propio, Maquina_Lista puede seguir en TRUE sin nadie atendiendo: se lanza igual.
         self.dormir(self.gracia_s)
         d = self.leer()
-        if d is not None and d['GVL.Maquina_Lista']:
+        if not forzar and d is not None and d['GVL.Maquina_Lista']:
             return
         if not self.lanzar:
             print('Iniciar main.py manualmente; el supervisor espera.', flush=True)
@@ -312,7 +318,7 @@ def reiniciar_servicio_codesys(espera_s=60):
         return psutil.win_service_get(nombre).status()
 
     def cambiar(orden, objetivo):
-        r = subprocess.run(['sc', orden, nombre], capture_output=True, text=True)
+        r = subprocess.run(['sc', orden, nombre], capture_output=True, text=True, errors='replace')
         limite = time.monotonic() + espera_s
         while estado() != objetivo:
             if time.monotonic() > limite:

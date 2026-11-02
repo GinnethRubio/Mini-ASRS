@@ -101,8 +101,9 @@ class Ejecutor:
     def comprobar(self, d):
         if d['GVL.Paso_Actual'] == 999 or d['GVL.Python_Error']:
             raise RuntimeError('Alarma: ' + str(d.get('GVL.Python_Mensaje') or 'secuencia en alarma') + '; sin rearme automático')
-        if any(d['GVL_HMI.' + n] for n in ('xModoManual', 'xModoPaso', 'xSimularCoppelia')):
-            raise RuntimeError('El contraste requiere automático continuo y CoppeliaSim real')
+        activos = [n for n in ('xModoManual', 'xModoPaso', 'xSimularCoppelia') if d['GVL_HMI.' + n]]
+        if activos:
+            raise RuntimeError('El contraste requiere automático continuo y CoppeliaSim real; activos: ' + ', '.join(activos))
         return d['GVL.Comunicacion_OK'] and int(d['GVL.IN1']) & 28 == 28
 
     def en_espera(self, d):
@@ -134,8 +135,18 @@ class Ejecutor:
             self.dormir(self.intervalo)
 
     def preparar(self):
-        d = self.leer()
-        self.comprobar(d)
+        # Tras un reinicio el PLC y main.py tardan unos segundos en dejar el modo automático estable.
+        limite = self.reloj() + 60
+        while True:
+            d = self.leer()
+            try:
+                self.comprobar(d)
+                break
+            except RuntimeError as exc:
+                if 'automático continuo' not in str(exc) or self.reloj() > limite:
+                    raise
+                self.log('esperando_modo_automatico', detalle=str(exc))
+                self.dormir(2)
         if not self.en_espera(d):
             raise RuntimeError('El PLC debe estar en espera y detenido')
         if not d['GVL.Maquina_Lista'] or not d['GVL.Inventario_Listo']:

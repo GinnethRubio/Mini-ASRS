@@ -32,7 +32,7 @@ class Escenario:
         self.inicio = datetime.now(timezone.utc) - timedelta(minutes=5)
         self.d = reposo(30)
         self.bloques = []
-        self.coordinador = SimpleNamespace(asegurar=lambda relanzar: self.lanzados.append(relanzar),
+        self.coordinador = SimpleNamespace(asegurar=lambda relanzar, forzar=False: self.lanzados.append(relanzar),
                                            descartar=lambda: None)
         self.lanzados = []
 
@@ -250,6 +250,18 @@ class Pruebas(unittest.TestCase):
         self.assertEqual(e.bloques, [e.inicio.isoformat()])
         eventos = [json.loads(x)['tipo'] for x in (Path(self.tmp.name) / 'supervisor.jsonl').read_text().splitlines()]
         self.assertIn('runtime_reiniciado', eventos)
+
+    def test_relanza_main_aunque_maquina_lista_quede_en_true(self):
+        lanzados = []
+        coord = sv.Coordinador(self.tmp.name, lambda: reposo(0), lanzar=True, gracia_s=0, dormir=lambda s: None)
+        original = sv.subprocess.Popen
+        sv.subprocess.Popen = lambda *a, **k: lanzados.append(a[0]) or SimpleNamespace(poll=lambda: None)
+        try:
+            coord.asegurar(relanzar=True)
+            coord.asegurar(relanzar=True, forzar=True)
+        finally:
+            sv.subprocess.Popen = original
+        self.assertEqual(len(lanzados), 1)
 
     def test_clasifica_cortes(self):
         self.assertTrue(sv.es_corte_comunicacion('ConnectionResetError(10054)'))
