@@ -180,6 +180,10 @@ python .\banco_pruebas_112\supervisor_campana.py --modo contraste --confirmar-mo
 
 Con las corridas completas, `analizar_experimentos.py pareado --campana <id>` produce la diferencia R − C con su intervalo de confianza y `contraste --campana <id>` compara cada tiempo integrado con el del modelo.
 
+### Calibración del modelo
+
+`analizar_experimentos.py calibrar --corridas <run_id_D>` ajusta, por tipo de operación, `t_integrado = a + b · t_modelo` con los tiempos de la campaña de cobertura y guarda `datos_experimentos/calibracion_modelo.json`. La campaña del modelo (`campana_rc.py --calibracion`) y el contraste (`contraste --calibracion`) usan ese archivo; el contraste de la fase C se calcula con y sin calibración, de modo que el modelo se ajusta con los datos de D y se valida con los de C. Con `--conectado`, la fase D vacía primero el rack, ejecuta la cobertura y calibra; la fase C deja el rack vacío al terminar.
+
 ### Supervisor de la campaña conectada
 
 `banco_pruebas_112/supervisor_campana.py` ejecuta la campaña por bloques y la mantiene en marcha sin intervención:

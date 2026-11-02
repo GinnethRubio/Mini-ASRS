@@ -192,6 +192,22 @@ class Pruebas(unittest.TestCase):
         self.assertEqual(estados['prueba_rcC_K003_r01_R_i2'], 'completa')
         self.assertEqual(estados['prueba_rcC_K003_r01_C'], 'completa')
 
+    def test_calibracion_recupera_la_recta(self):
+        from calibracion import ajustar, aplicar
+        puntos = [(op, x, 3.0 + 1.1 * x) for op in ('STORE', 'RETRIEVE') for x in range(10, 40, 2)]
+        par = ajustar(puntos)
+        self.assertAlmostEqual(par['STORE']['a_s'], 3.0, places=6)
+        self.assertAlmostEqual(par['RETRIEVE']['b'], 1.1, places=6)
+        self.assertAlmostEqual(aplicar(par, 'STORE', 20), 25.0, places=6)
+        self.assertEqual(aplicar(None, 'STORE', 20), 20)
+
+    def test_vaciado_deja_el_rack_vacio(self):
+        plc = PLCSimulado([3, 40, 90])
+        self.args.vaciar = True
+        self.assertEqual(self.contraste(plc, []).ejecutar(), 0)
+        self.assertFalse(any(plc.ocupada))
+        self.assertEqual(plc.d['GVL_HMI.iRecuperados'], 3)
+
     def test_destino_rechazado_por_el_plc_detiene(self):
         plc = PLCSimulado([1, 2])
         ejecutor = cr.Ejecutor(plc.leer, plc.escribir, lambda *a, **k: None, reloj=self.reloj,

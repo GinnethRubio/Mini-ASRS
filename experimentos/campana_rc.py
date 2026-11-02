@@ -104,7 +104,8 @@ def recorridos(c, operacion):
     return rx * 1000, rz * 1000
 
 
-def correr(corrida, politica, k, semillas, celdas, costo, calentamiento):
+def correr(corrida, politica, k, semillas, celdas, costo, calentamiento, calibracion=None):
+    from calibracion import aplicar
     celdas_iniciales, fracciones = generar_entradas(k, [np.random.default_rng(s) for s in semillas], calentamiento)
     rng_r = np.random.default_rng(semillas[2])
     ubicacion = {f'AS-{n:04d}': i for n, i in enumerate(celdas_iniciales, 1)}
@@ -118,6 +119,7 @@ def correr(corrida, politica, k, semillas, celdas, costo, calentamiento):
             t, d = ciclo_almacenamiento(celdas[i])
         else:
             t, d = ciclo_recuperacion(celdas[i])
+        t = aplicar(calibracion, operacion, t)
         rx, rz = recorridos(celdas[i], operacion)
         corrida.operacion(fase=fase, pareja=p, qr=qr, operacion=operacion,
                           columna=celdas[i]['columna'], fila=celdas[i]['fila'],
@@ -161,7 +163,10 @@ def main():
     ap.add_argument('--costo-c', choices=['tiempo', 'dist'], default='tiempo')
     ap.add_argument('--calentamiento', type=int, default=3, help='Parejas de calentamiento = este factor por K')
     ap.add_argument('--salida', type=Path, default=PROYECTO / 'datos_experimentos')
+    ap.add_argument('--calibracion', type=Path, help='calibracion_modelo.json del sistema integrado')
     args = ap.parse_args()
+    from calibracion import cargar
+    calibracion = cargar(args.calibracion)
     ocupaciones = [int(k) for k in args.ocupaciones.split(',')]
     if args.replicas < 2 or any(not 1 <= k <= 111 for k in ocupaciones) or args.calentamiento < 0:
         ap.error('Se requieren al menos 2 réplicas, ocupaciones entre 1 y 111 y calentamiento no negativo')
@@ -179,7 +184,8 @@ def main():
                              banda=T_BANDA, lectura_qr=T_LECTURA_QR),
         estaciones_m=dict(recogida=[X_RECOGIDA, Z_RECOGIDA], despacho=[X_DESPACHO, Z_DESPACHO],
                           holgura_despacho=HOLGURA_DESPACHO),
-        ejes='X y Z secuenciales; cada operación inicia y termina en la estación de recogida')
+        ejes='X y Z secuenciales; cada operación inicia y termina en la estación de recogida',
+        calibracion=str(args.calibracion) if args.calibracion else None)
     raiz = np.random.SeedSequence(args.semilla)
     for k, sk in zip(ocupaciones, raiz.spawn(len(ocupaciones))):
         for replica, sr in enumerate(sk.spawn(args.replicas), 1):
@@ -193,7 +199,7 @@ def main():
                              inventario_inicial={f'AS-{n:04d}': i for n, i in enumerate(inventario, 1)},
                              escenario=escenario, licencia='No aplica: modelo rápido en Python',
                              alcance='Modelo rápido de tiempos; no incluye latencias de OPC UA, FluidSIM ni CoppeliaSim.') as c:
-                    resumen = correr(c, politica, k, semillas, celdas, costo, args.calentamiento * k)
+                    resumen = correr(c, politica, k, semillas, celdas, costo, args.calentamiento * k, calibracion)
                     c.cerrar('completa', resumen)
     print('Campaña:', campana_id, '| datos en', args.salida.resolve())
     return campana_id

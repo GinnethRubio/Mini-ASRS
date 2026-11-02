@@ -259,6 +259,14 @@ class Contraste:
                 self.estado['siguiente'] = i + 1
                 self.guardar()
                 self.log('corrida_completa', run_id=run_id, siguiente=i + 1, total=len(self.plan))
+            # Rack vacío al final: deja el sistema listo para la campaña de cobertura.
+            for op in transicion(self.ocupadas(), []) if getattr(self.args, 'vaciar', False) else []:
+                if not self.cabe(1):
+                    self.log('bloque_cerrado', motivo='tiempo de runtime agotado durante el vaciado', siguiente=len(self.plan))
+                    return 3
+                preparacion = preparacion or self.nuevo_registro(
+                    f"prep_{self.args.campana}_b{self.estado['bloques']:02d}", None)
+                self.registrar(preparacion, op, self.ejecutor.ejecutar(op), 'diagnostico', {})
             self.log('contraste_completo', corridas=len(self.plan))
             return 0
         finally:
@@ -288,6 +296,8 @@ def main():
     ap.add_argument('--limite-runtime-min', type=float, default=60)
     ap.add_argument('--margen-runtime-min', type=float, default=10)
     ap.add_argument('--espera-comunicacion-s', type=float, default=300)
+    ap.add_argument('--vaciar', action='store_true', help='Recuperar todos los sobres al terminar')
+    ap.add_argument('--solo-vaciar', action='store_true', help='Solo recuperar todos los sobres del rack')
     args = ap.parse_args()
     if not args.confirmar_movimientos:
         ap.error('El contraste mueve la simulación: agregar --confirmar-movimientos')
@@ -298,7 +308,8 @@ def main():
     args.t_operacion_s = c.get('t_operacion_estimado_s', T_OPERACION_S)
     if 2 * c['parejas'] * args.t_operacion_s > (args.limite_runtime_min - args.margen_runtime_min) * 60:
         ap.error('Una corrida no cabe en una ventana del runtime: reducir parejas o ampliar el límite')
-    plan = plan_contraste(c['semilla'], p['ocupaciones'], c['replicas'], c['parejas'], p['costo_c'])
+    args.vaciar = args.vaciar or args.solo_vaciar
+    plan = [] if args.solo_vaciar else plan_contraste(c['semilla'], p['ocupaciones'], c['replicas'], c['parejas'], p['costo_c'])
     carpeta = args.salida / (datetime.now().strftime('%Y%m%d_%H%M%S_%f') + '_contraste')
     carpeta.mkdir(parents=True)
     print('Logs:', carpeta.resolve(), flush=True)

@@ -50,6 +50,7 @@ class Ejecucion:
         (self.carpeta / 'experimento.json').write_text(texto_protocolo, encoding='utf-8')
         self.hash_protocolo = hashlib.sha256(texto_protocolo.encode('utf-8')).hexdigest()
         self.resumen = dict(ejecucion=self.id, protocolo_sha256=self.hash_protocolo, fases={})
+        self.calibracion = self.datos / 'calibracion_modelo.json'
 
     def guardar(self):
         (self.carpeta / 'resumen.json').write_text(json.dumps(self.resumen, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -98,6 +99,8 @@ class Ejecucion:
                '--semilla', str(semilla), '--ocupaciones', ','.join(map(str, self.p['ocupaciones'])),
                '--costo-c', self.p['costo_c'], '--calentamiento', str(self.p['calentamiento_factor_k']),
                '--salida', str(self.datos)]
+        if self.calibracion.exists():
+            cmd += ['--calibracion', str(self.calibracion)]
         salida = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', check=True).stdout
         return salida.split('Campaña:', 1)[1].split('|', 1)[0].strip()
 
@@ -130,25 +133,43 @@ class Ejecucion:
 
     def fase_c(self):
         campana = self.args.campana_contraste or f'{self.id}_rcC'
-        codigo = self.supervisor('--modo', 'contraste', '--campana', campana, '--protocolo', str(self.args.protocolo))
+        codigo = self.supervisor('--modo', 'contraste', '--campana', campana, '--protocolo', str(self.args.protocolo),
+                                 '--vaciar')
         resultado = dict(ok=codigo == 0, codigo=codigo, campana=campana)
         if codigo == 0:
             c = self.p['contraste']
+            tolerancia = ['--tol-abs', str(c['tolerancia_abs_s']), '--tol-rel', str(c['tolerancia_rel'])]
             resultado.update(pareado=self.analizar('pareado', '--campana', campana),
-                             contraste_modelo=self.analizar('contraste', '--campana', campana,
-                                                            '--tol-abs', str(c['tolerancia_abs_s']),
-                                                            '--tol-rel', str(c['tolerancia_rel'])))
+                             contraste_modelo=self.analizar('contraste', '--campana', campana, *tolerancia))
+            if self.calibracion.exists():
+                resultado['contraste_modelo_calibrado'] = self.analizar(
+                    'contraste', '--campana', campana, *tolerancia, '--calibracion', str(self.calibracion))
         else:
             resultado['reanudar'] = f'python experimento.py --fases C --campana-contraste {campana}'
         return resultado
 
     def fase_d(self):
         c = self.p['conectado']
+        resultado = {}
+        if not self.args.reanudar:
+            # La cobertura exige rack vacío: se recuperan los sobres que haya, con el mismo supervisor.
+            vaciado = self.supervisor('--modo', 'contraste', '--solo-vaciar', '--campana', f'{self.id}_vaciado',
+                                      '--protocolo', str(self.args.protocolo))
+            resultado['vaciado'] = vaciado
+            if vaciado != 0:
+                return dict(resultado, ok=False, codigo=vaciado, detalle='No se pudo vaciar el rack')
         extra = ['--estrategia', str(c['estrategia']), '--bloque-min', str(c['bloque_min'])]
         if self.args.reanudar:
             extra += ['--reanudar', str(self.args.reanudar)]
         codigo = self.supervisor(*extra)
-        return dict(ok=codigo == 0, codigo=codigo)
+        resultado.update(ok=codigo == 0, codigo=codigo)
+        if codigo == 0:
+            import csv
+            with (self.datos / 'registro_corridas.csv').open(encoding='utf-8') as f:
+                d = [r['run_id'] for r in csv.DictReader(f) if r['nivel'] == 'D' and r['estado'] == 'completa']
+            if d:
+                resultado.update(corrida=d[-1], calibracion=self.analizar('calibrar', '--corridas', d[-1]))
+        return resultado
 
 
 def iterar(suite):

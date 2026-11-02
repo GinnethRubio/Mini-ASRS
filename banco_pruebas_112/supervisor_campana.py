@@ -292,6 +292,7 @@ def bloque_contraste(args, carpeta):
                '--salida', str(Path(carpeta) / 'bloques'), '--datos', str(args.datos), '--opc-url', args.opc_url,
                '--inicio-runtime', inicio, '--limite-runtime-min', str(args.limite_runtime_min),
                '--margen-runtime-min', str(args.margen_runtime_min)]
+        cmd += ['--solo-vaciar'] if args.solo_vaciar else ['--vaciar'] if args.vaciar else []
         return lanzar_bloque(cmd, numero)
     return ejecutar
 
@@ -314,6 +315,8 @@ def main():
     ap.add_argument('--estrategia', type=int, choices=[0, 1, 2], default=2)
     ap.add_argument('--campana', help='Contraste: identificador de la campaña a crear o continuar')
     ap.add_argument('--protocolo', type=Path, default=RAIZ / 'experimento.json')
+    ap.add_argument('--vaciar', action='store_true', help='Contraste: recuperar todos los sobres al terminar')
+    ap.add_argument('--solo-vaciar', action='store_true', help='Contraste: solo vaciar el rack')
     ap.add_argument('--confirmar-movimientos', action='store_true')
     ap.add_argument('--continuar', action='store_true')
     ap.add_argument('--reanudar', type=Path)

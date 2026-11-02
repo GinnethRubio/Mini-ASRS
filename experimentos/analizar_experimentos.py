@@ -2,7 +2,8 @@
 
 python experimentos/analizar_experimentos.py pareado  --campana 20261101_200035_rc
 python experimentos/analizar_experimentos.py potencia --campana ID_PILOTO --delta 1.0
-python experimentos/analizar_experimentos.py contraste --corridas RUN_ID_INTEGRADO [RUN_ID ...]
+python experimentos/analizar_experimentos.py contraste --campana ID_INTEGRADA [--calibracion ARCHIVO]
+python experimentos/analizar_experimentos.py calibrar --corridas RUN_ID_D
 python experimentos/analizar_experimentos.py verificar
 
 Los resultados se escriben en datos_experimentos/analisis/<fecha>_<tipo>/ junto con un
@@ -50,7 +51,7 @@ def salida(raiz, tipo, entradas, parametros):
     (destino / 'manifiesto_analisis.json').write_text(json.dumps(dict(
         tipo=tipo, fecha_utc=ahora_utc(), parametros=parametros,
         entradas={str(p.relative_to(raiz)).replace('\\', '/'): sha256(p) for p in entradas}),
-        ensure_ascii=False, indent=2), encoding='utf-8')
+        ensure_ascii=False, indent=2, default=str), encoding='utf-8')
     return destino
 
 
@@ -192,7 +193,9 @@ def contraste(args):
     sys.path.insert(0, str(AQUI))
     from campana_rc import cargar_celdas, ciclo_recuperacion
     from evaluar_estrategias import ciclo_almacenamiento
+    from calibracion import aplicar, cargar
     raiz = args.raiz
+    calibracion = cargar(args.calibracion)
     celdas = {(c['columna'], c['fila']): c for c in cargar_celdas().values()}
     if args.campana:
         sel = corridas(raiz, lambda r: r['run_id'].startswith(args.campana) and r['estado'] == 'completa')
@@ -211,6 +214,7 @@ def contraste(args):
                 continue
             c = celdas[(int(o['columna']), int(o['fila']))]
             t_mod = (ciclo_almacenamiento if o['operacion'] == 'STORE' else ciclo_recuperacion)(c)[0]
+            t_mod = aplicar(calibracion, o['operacion'], t_mod)
             t_int = float(o['tiempo_s'])
             filas.append(dict(run_id=r['run_id'], operacion=o['operacion'], columna=o['columna'], fila=o['fila'],
                               tiempo_modelo_s=t_mod, tiempo_integrado_s=t_int, error_s=t_mod - t_int,
@@ -225,11 +229,42 @@ def contraste(args):
                    mae_s=statistics.mean(absolutos), sesgo_s=statistics.mean(err), max_abs_s=absolutos[-1],
                    p95_abs_s=absolutos[min(len(absolutos) - 1, math.ceil(.95 * len(absolutos)) - 1)],
                    fraccion_dentro_tolerancia=sum(f['dentro_tolerancia'] for f in filas) / len(filas),
-                   tolerancia=f'max({args.tol_abs} s, {args.tol_rel:.0%} del tiempo integrado), fijada antes del contraste')
+                   tolerancia=f'max({args.tol_abs} s, {args.tol_rel:.0%} del tiempo integrado), fijada antes del contraste',
+                   modelo='calibrado con ' + str(args.calibracion) if calibracion else 'sin calibrar')
     destino = salida(raiz, 'contraste', entradas, vars(args) | {'raiz': str(raiz)})
     escribir_csv(destino / 'contraste_por_operacion.csv', filas)
     (destino / 'resumen_contraste.json').write_text(json.dumps(resumen, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps(resumen, ensure_ascii=False, indent=2))
+    print('Análisis:', destino)
+
+
+def calibrar(args):
+    """Ajusta el modelo con las operaciones correctas de corridas integradas (nivel D o C)."""
+    sys.path.insert(0, str(AQUI))
+    from campana_rc import cargar_celdas
+    from calibracion import ajustar, tiempo_modelo
+    raiz = args.raiz
+    celdas = {(c['columna'], c['fila']): c for c in cargar_celdas().values()}
+    sel = corridas(raiz, lambda r: r['run_id'] in args.corridas)
+    if len(sel) != len(args.corridas):
+        raise SystemExit('Corridas no encontradas en el índice')
+    puntos, entradas = [], []
+    for r in sel:
+        p = raiz / r['ruta'] / 'operaciones.csv'
+        entradas.append(p)
+        for o in leer_csv(p):
+            if o['resultado'] == 'correcto' and o['tiempo_s'] and float(o['tiempo_s']) > 0:
+                c = celdas[(int(o['columna']), int(o['fila']))]
+                puntos.append((o['operacion'], tiempo_modelo(c, o['operacion']), float(o['tiempo_s'])))
+    if not puntos:
+        raise SystemExit('Sin operaciones correctas para calibrar')
+    parametros = ajustar(puntos)
+    destino = salida(raiz, 'calibracion', entradas, vars(args) | {'raiz': str(raiz)})
+    contenido = json.dumps(dict(corridas=args.corridas, modelo='t_integrado = a + b * t_modelo por operación',
+                                parametros=parametros), ensure_ascii=False, indent=2)
+    (destino / 'calibracion_modelo.json').write_text(contenido, encoding='utf-8')
+    (raiz / 'calibracion_modelo.json').write_text(contenido, encoding='utf-8')
+    print(contenido)
     print('Análisis:', destino)
 
 
@@ -261,9 +296,12 @@ def main():
     g.add_argument('--campana', help='Prefijo de una campaña integrada; usa sus corridas completas')
     p.add_argument('--tol-abs', type=float, default=.5)
     p.add_argument('--tol-rel', type=float, default=.05)
+    p.add_argument('--calibracion', type=Path, help='calibracion_modelo.json obtenido de otra campaña integrada')
+    p = sub.add_parser('calibrar')
+    p.add_argument('--corridas', nargs='+', required=True, help='run_id de corridas integradas (nivel D o C)')
     sub.add_parser('verificar')
     args = ap.parse_args()
-    return dict(pareado=pareado, potencia=potencia, contraste=contraste, verificar=verificar_todo)[args.tipo](args)
+    return dict(pareado=pareado, potencia=potencia, contraste=contraste, calibrar=calibrar, verificar=verificar_todo)[args.tipo](args)
 
 
 if __name__ == '__main__':
