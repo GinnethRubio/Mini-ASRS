@@ -64,20 +64,25 @@ class Recuperacion:
                 raise RuntimeError('Límites articulares no válidos')
             if not limites[0] <= objetivo <= sum(limites):
                 raise RuntimeError('Despacho fuera de límites articulares')
-        # Filtrar por alias en el servidor evita una consulta remota por cada
-        # pieza del rack. No bloquear el heartbeat recorriendo toda la escena.
+        # Con el rack lleno, consultar la posición de cada sobre tarda más que el
+        # heartbeat. Los sobres registrados están en su celda; solo se buscan los
+        # demás. La banda de entrada numera con el menor número libre, así que un
+        # sobre sin registrar nunca supera registrados + sobres en escena.
         inicio_validacion=time.monotonic()
-        for indice in range(4096):
+        registrados={int(q[3:]) for c in validar_inventario()['celdas']
+                     for q in [str(c.get('qr') or '').strip()] if c['ocupada'] and q[3:].isdigit()}
+        tope=max(registrados|{len(registrados)})+16
+        for n in range(tope+1):
+            if n in registrados:
+                continue
             if time.monotonic()-inicio_validacion>7:
                 raise RuntimeError('Validación de despacho lenta; revisar conexión con CoppeliaSim')
-            h=sim.getObject('/Sobre_*',{'index':indice,'noError':True})
-            if h==-1:break
-            if h == self.p._sobre_sujeto:
+            h=sim.getObject(f'/Sobre_{n:03d}',{'noError':True})
+            if h==-1 or h == self.p._sobre_sujeto:
                 continue
             pos = sim.getObjectPosition(h, -1)
             if all(abs(pos[i] - POS_SOBRE_DESPACHO[i]) < t for i, t in enumerate((.15, .25, .08))):
                 raise RuntimeError('Segunda banda ocupada: retire el sobre de despacho')
-        else:raise RuntimeError('Demasiados sobres para validar despacho')
 
     def ir_al_origen(self):
         if self.celda is not None or self.p._sobre_sujeto is not None:

@@ -43,7 +43,7 @@ class Sim:
     def __init__(self):
         self.paths={RUTA_X:1,RUTA_Y:2,RUTA_Z:3,RUTA_GRIPPER:4,
                     '/Portico/Prismatico_Z/Carro_en_Z/Prismatico_X/Prismatico_Y/Gripper':5,
-                    '/Sobre_001':6,'/Prismatico_Banda_Entrada':7,'/Prismatico_Banda_Salida':8}
+                    '/Sobre_001':6,'/Sobre_002':9,'/Prismatico_Banda_Entrada':7,'/Prismatico_Banda_Salida':8}
         self.j={1:-.262,2:-.05,3:-.675,4:0.}
         self.pos={6:[0,0,0]}
         self.parent={6:-1}
@@ -52,7 +52,8 @@ class Sim:
             encontrados=[h for h in self.pos if self.getObjectAlias(h).startswith('Sobre_')]
             i=a[0].get('index',0) if a else 0
             return encontrados[i] if i<len(encontrados) else -1
-        return self.paths.get(path,-1)
+        h=self.paths.get(path,-1)
+        return h if h in self.pos or not path.startswith('/Sobre_') else -1
     def getJointPosition(self,h): return self.j[h]
     def setJointPosition(self,h,v):
         delta=v-self.j[h]

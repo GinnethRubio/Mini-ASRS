@@ -165,6 +165,11 @@ class Supervisor:
     def ejecutar(self):
         interrupcion = None
         pendiente = None
+        if self.punto is not None and self.cobertura and self.punto.exists():
+            # Un estado interrumpido (alarma o corte) se convierte en punto de continuación
+            # con el inventario de la escena cuando el PLC vuelve a estar listo.
+            if json.loads(self.punto.read_text(encoding='utf-8')).get('estado') == 'interrumpido':
+                pendiente, self.punto = self.punto, None
         while True:
             inicio = self.inicio_runtime()
             if not (inicio and self.margen_suficiente(inicio)):

@@ -179,6 +179,27 @@ class Pruebas(unittest.TestCase):
         self.assertEqual(len(lanzados), 1)
         self.assertTrue(lanzados[0][-1].endswith('main.py'))
 
+    def test_reanuda_desde_estado_interrumpido_por_alarma(self):
+        e = self.e
+        estado = Path(self.tmp.name) / 'estado_interrumpido.json'
+        estado.write_text(json.dumps(dict(
+            version=1, estado='interrumpido', fase='extrayendo', cola=[f'AS-{i+1:03}' for i in range(30)],
+            estrategia=2, cobertura={'almacenar': [[c, f] for c in range(1, 5) for f in range(1, 29)],
+                                     'recuperar': [[1, 1]]},
+            campana_id='c1', log_anterior=self.tmp.name, motivo="RuntimeError('Alarma')")), encoding='utf-8')
+        self.args.reanudar = str(estado)
+
+        def ejecutar(n, punto, continuar, inicio):
+            e.bloques.append(punto)
+            return 0, str(e.carpeta(n))
+        sup = self.supervisor(ejecutar)
+        self.assertEqual(sup.ejecutar(), 0)
+        sup.cerrar()
+        self.assertEqual(Path(e.bloques[0]).name, 'continuar_tras_reconexion.json')
+        punto = json.loads(Path(e.bloques[0]).read_text(encoding='utf-8'))
+        self.assertEqual(punto['fase'], 'siguiente')
+        self.assertEqual(sum(punto['ocupadas']), 30)
+
     def test_clasifica_cortes(self):
         self.assertTrue(sv.es_corte_comunicacion('ConnectionResetError(10054)'))
         self.assertTrue(sv.es_corte_comunicacion("RuntimeError('Contador de operaciones reiniciado')"))
